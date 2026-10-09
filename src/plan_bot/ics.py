@@ -1,0 +1,314 @@
+"""Turn an iCalendar (RFC 5545) feed into concrete :class:`Lesson` occurrences.
+
+Recurrence is expanded with :mod:`dateutil.rrule` in the event's *local wall
+clock*: a class at 08:30 Europe/Warsaw stays at 08:30 after the switch to or
+from daylight saving time, exactly as calendar clients render it. ``EXDATE`` and
+``RECURRENCE-ID`` values are compared as UTC instants, so it does not matter
+which timezone the feed uses to spell them.
+"""
+
+from __future__ import annotations
+
+import logging
+from collections.abc import Iterable, Iterator
+from dataclasses import dataclass
+from datetime import UTC, date, datetime, time, timedelta, tzinfo
+from typing import Any
+
+from dateutil.rrule import rrulestr
+from icalendar import Calendar, Component
+from icalendar.prop import vRecur
+
+from plan_bot.domain import Lesson
+
+log = logging.getLogger(__name__)
+
+#: Hard cap on generated occurrences per series, as a guard against hostile feeds.
+MAX_OCCURRENCES_PER_EVENT = 2000
+DEFAULT_DURATION = timedelta(minutes=90)
+
+
+class IcsError(ValueError):
+    """The document is not a usable iCalendar feed."""
+
+
+@dataclass(frozen=True, slots=True)
+class Window:
+    """Half-open interval ``[start, end)`` of aware datetimes."""
+
+    start: datetime
+    end: datetime
+
+    def contains(self, moment: datetime) -> bool:
+        return self.start <= moment < self.end
+
+
+def parse_calendar(data: bytes | str) -> Calendar:
+    try:
+        cal = Calendar.from_ical(data)
+    except Exception as exc:  # icalendar raises a variety of exception types
+        raise IcsError(f"not a valid iCalendar document: {exc}") from exc
+    if not isinstance(cal, Calendar) or cal.name != "VCALENDAR":
+        raise IcsError("document does not contain a VCALENDAR")
+    return cal
+
+
+def expand(data: bytes | str, window: Window, default_tz: tzinfo) -> list[Lesson]:
+    """Parse ``data`` and return every lesson starting inside ``window``, sorted."""
+    cal = parse_calendar(data)
+    masters: dict[str, Component] = {}
+    overrides: dict[str, list[Component]] = {}
+    singles: list[Component] = []
+    for event in cal.walk("VEVENT"):
+        uid = str(event.get("UID", "")).strip()
+        if not uid or "DTSTART" not in event:
+            log.debug("skipping VEVENT without UID or DTSTART")
+            continue
+        if "RECURRENCE-ID" in event:
+            overrides.setdefault(uid, []).append(event)
+        elif "RRULE" in event or "RDATE" in event:
+            masters[uid] = event
+        else:
+            singles.append(event)
+
+    lessons: list[Lesson] = []
+    for event in singles:
+        lesson = _lesson_from(event, key=str(event["UID"]), default_tz=default_tz)
+        if lesson is not None and window.contains(lesson.start):
+            lessons.append(lesson)
+
+    for uid, master in masters.items():
+        lessons.extend(_expand_series(uid, master, overrides.pop(uid, []), window, default_tz))
+
+    # Overrides whose master is missing (or was not recurring) still describe a class.
+    for uid, orphans in overrides.items():
+        for event in orphans:
+            rid = _aware(event.decoded("RECURRENCE-ID"), default_tz)
+            if rid is None:
+                continue
+            lesson = _lesson_from(event, key=_occurrence_key(uid, rid), default_tz=default_tz)
+            if lesson is not None and window.contains(lesson.start):
+                lessons.append(lesson)
+
+    lessons.sort(key=lambda les: (les.start, les.summary, les.key))
+    return lessons
+
+
+def _expand_series(
+    uid: str,
+    master: Component,
+    overrides: list[Component],
+    window: Window,
+    default_tz: tzinfo,
+) -> Iterator[Lesson]:
+    dtstart = _aware(master.decoded("DTSTART"), default_tz)
+    if dtstart is None:  # all-day series are not classes
+        return
+    tz = dtstart.tzinfo
+    assert tz is not None
+    duration = _duration(master, dtstart, default_tz)
+
+    by_rid: dict[datetime, Component] = {}
+    for event in overrides:
+        rid = _aware(event.decoded("RECURRENCE-ID"), default_tz)
+        if rid is not None:
+            by_rid[rid.astimezone(UTC)] = event
+
+    excluded = {d.astimezone(UTC) for d in _date_list(master, "EXDATE", tz)}
+    starts = set(_rrule_starts(master, dtstart, window, duration))
+    starts.update(d for d in _date_list(master, "RDATE", tz))
+    starts.add(dtstart)
+
+    seen_rids: set[datetime] = set()
+    for original in sorted(starts):
+        rid_utc = original.astimezone(UTC)
+        if rid_utc in excluded:
+            continue
+        seen_rids.add(rid_utc)
+        key = _occurrence_key(uid, original)
+        override = by_rid.get(rid_utc)
+        if override is not None:
+            lesson = _lesson_from(override, key=key, default_tz=default_tz, fallback=master)
+        else:
+            lesson = _lesson_from(master, key=key, default_tz=default_tz, start=original)
+        if lesson is not None and window.contains(lesson.start):
+            yield lesson
+
+    # An override may move an occurrence into the window from outside it.
+    for rid_utc, override in by_rid.items():
+        if rid_utc in seen_rids or rid_utc in excluded:
+            continue
+        lesson = _lesson_from(
+            override, key=_occurrence_key(uid, rid_utc), default_tz=default_tz, fallback=master
+        )
+        if lesson is not None and window.contains(lesson.start):
+            yield lesson
+
+
+def _rrule_starts(
+    master: Component, dtstart: datetime, window: Window, duration: timedelta
+) -> Iterator[datetime]:
+    rules = master.get("RRULE")
+    if rules is None:
+        return
+    if not isinstance(rules, list):
+        rules = [rules]
+    tz = dtstart.tzinfo
+    assert tz is not None
+    naive_start = dtstart.replace(tzinfo=None)
+    # Search a little before the window so occurrences shifted by an override are seen.
+    lo = (window.start - duration - timedelta(days=1)).astimezone(tz).replace(tzinfo=None)
+    hi = window.end.astimezone(tz).replace(tzinfo=None)
+    for rule in rules:
+        try:
+            rset = rrulestr(_naive_rule(rule, tz), dtstart=naive_start, forceset=True)
+        except Exception as exc:  # broken RRULE values surface as various exception types
+            log.warning("ignoring unparsable RRULE in %s: %s", master.get("UID"), exc)
+            continue
+        for count, occurrence in enumerate(rset.xafter(lo, inc=True)):
+            if occurrence >= hi or count >= MAX_OCCURRENCES_PER_EVENT:
+                break
+            yield _localize(occurrence, tz)
+
+
+def _naive_rule(rule: vRecur, tz: tzinfo) -> str:
+    """Render ``rule`` with ``UNTIL`` converted to naive local time.
+
+    Expanding in naive local time keeps the wall-clock time stable across DST.
+    """
+    data: dict[str, Any] = {k: list(v) for k, v in rule.items()}
+    until = data.get("UNTIL")
+    if until:
+        value = until[0]
+        if isinstance(value, datetime):
+            if value.tzinfo is not None:
+                value = value.astimezone(tz)
+            data["UNTIL"] = [value.replace(tzinfo=None)]
+        elif isinstance(value, date):
+            data["UNTIL"] = [datetime.combine(value, time(23, 59, 59))]
+    rendered: bytes = vRecur(data).to_ical()  # type: ignore[no-untyped-call]
+    return rendered.decode()
+
+
+def _localize(naive: datetime, tz: tzinfo) -> datetime:
+    """Attach ``tz``; wall times that do not exist (spring-forward gap) are shifted.
+
+    Normalising through UTC turns 02:30 on the day clocks jump from 02:00 to
+    03:00 into 03:30, which is what calendar applications show as well.
+    """
+    return naive.replace(tzinfo=tz).astimezone(UTC).astimezone(tz)
+
+
+def _lesson_from(
+    event: Component,
+    *,
+    key: str,
+    default_tz: tzinfo,
+    start: datetime | None = None,
+    fallback: Component | None = None,
+) -> Lesson | None:
+    """Build a lesson from ``event``; properties missing on overrides come from ``fallback``."""
+
+    def prop(name: str) -> Any:
+        if name in event:
+            return event.get(name)
+        if fallback is not None:
+            return fallback.get(name)
+        return None
+
+    if start is None:
+        start = _aware(event.decoded("DTSTART"), default_tz)
+        if start is None:
+            return None
+        end = _end(event, start, default_tz, fallback)
+    else:
+        base = _aware(event.decoded("DTSTART"), default_tz)
+        assert base is not None
+        assert start.tzinfo is not None
+        wall_end = start.replace(tzinfo=None) + _duration(event, base, default_tz)
+        end = _localize(wall_end, start.tzinfo)
+
+    status = str(prop("STATUS") or "").upper()
+    return Lesson(
+        key=key,
+        uid=str(event.get("UID", "") or (fallback.get("UID", "") if fallback else "")),
+        start=start,
+        end=end,
+        summary=_text(prop("SUMMARY")) or "(untitled)",
+        location=_text(prop("LOCATION")),
+        description=_text(prop("DESCRIPTION")),
+        groups=tuple(_categories(prop("CATEGORIES"))),
+        cancelled=status == "CANCELLED",
+    )
+
+
+def _end(
+    event: Component, start: datetime, default_tz: tzinfo, fallback: Component | None
+) -> datetime:
+    if "DTEND" in event:
+        end = _aware(event.decoded("DTEND"), default_tz)
+        if end is not None and end >= start:
+            return end
+    if "DURATION" in event:
+        value = event.decoded("DURATION")
+        if isinstance(value, timedelta):
+            return start + value
+    if fallback is not None:
+        base = _aware(fallback.decoded("DTSTART"), default_tz)
+        if base is not None:
+            return start + _duration(fallback, base, default_tz)
+    return start + DEFAULT_DURATION
+
+
+def _duration(event: Component, start: datetime, default_tz: tzinfo) -> timedelta:
+    if "DTEND" in event:
+        end = _aware(event.decoded("DTEND"), default_tz)
+        if end is not None and end >= start:
+            # Duration in wall-clock terms, so DST does not stretch a class.
+            return end.replace(tzinfo=None) - start.astimezone(end.tzinfo).replace(tzinfo=None)
+    if "DURATION" in event:
+        value = event.decoded("DURATION")
+        if isinstance(value, timedelta):
+            return value
+    return DEFAULT_DURATION
+
+
+def _aware(value: object, default_tz: tzinfo) -> datetime | None:
+    """Return an aware datetime, or ``None`` for all-day (date-only) values."""
+    if isinstance(value, datetime):
+        return value if value.tzinfo is not None else value.replace(tzinfo=default_tz)
+    return None
+
+
+def _date_list(event: Component, name: str, tz: tzinfo) -> Iterator[datetime]:
+    values = event.get(name)
+    if values is None:
+        return
+    if not isinstance(values, list):
+        values = [values]
+    for group in values:
+        for item in getattr(group, "dts", []):
+            moment = _aware(item.dt, tz)
+            if moment is not None:
+                yield moment
+
+
+def _categories(value: object) -> Iterable[str]:
+    if value is None:
+        return []
+    items = value if isinstance(value, list) else [value]
+    out: list[str] = []
+    for item in items:
+        for cat in getattr(item, "cats", [item]):
+            text = str(cat).strip()
+            if text and text not in out:
+                out.append(text)
+    return out
+
+
+def _text(value: object) -> str:
+    return " ".join(str(value).split()) if value is not None else ""
+
+
+def _occurrence_key(uid: str, original_start: datetime) -> str:
+    return f"{uid}@{original_start.astimezone(UTC):%Y%m%dT%H%M%SZ}"
