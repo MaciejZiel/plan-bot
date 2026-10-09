@@ -1,0 +1,28 @@
+# Third-party components
+
+All third-party code used by plan-bot, with its license. Python packages are
+resolved from PyPI and pinned in `uv.lock`; versions below match the lock file.
+Only permissive licenses are accepted (no GPL/LGPL/AGPL/MPL/EPL/SSPL/CDDL).
+
+| source | name | license type | license link |
+|---|---|---|---|
+| https://pypi.org/project/colorama/ | colorama 0.4.6 | BSD-3-Clause | https://github.com/tartley/colorama/blob/master/LICENSE.txt |
+| https://pypi.org/project/coverage/ | coverage 7.16.1 | Apache-2.0 | https://github.com/coveragepy/coveragepy/blob/main/LICENSE.txt |
+| https://pypi.org/project/icalendar/ | icalendar 7.3.0 | BSD-2-Clause | https://github.com/collective/icalendar/blob/main/LICENSE.rst |
+| https://pypi.org/project/iniconfig/ | iniconfig 2.3.0 | MIT | https://github.com/pytest-dev/iniconfig/blob/main/LICENSE |
+| https://pypi.org/project/mypy/ | mypy 1.15.0 | MIT | https://github.com/python/mypy/blob/master/LICENSE |
+| https://pypi.org/project/mypy-extensions/ | mypy-extensions 1.1.0 | MIT | https://github.com/python/mypy_extensions/blob/master/LICENSE |
+| https://pypi.org/project/packaging/ | packaging 26.3 | Apache-2.0 OR BSD-2-Clause | https://github.com/pypa/packaging/blob/main/LICENSE |
+| https://pypi.org/project/pluggy/ | pluggy 1.6.0 | MIT | https://github.com/pytest-dev/pluggy/blob/main/LICENSE |
+| https://pypi.org/project/Pygments/ | Pygments 2.21.0 | BSD-2-Clause | https://github.com/pygments/pygments/blob/master/LICENSE |
+| https://pypi.org/project/pytest/ | pytest 9.1.1 | MIT | https://github.com/pytest-dev/pytest/blob/main/LICENSE |
+| https://pypi.org/project/pytest-asyncio/ | pytest-asyncio 1.4.0 | Apache-2.0 | https://github.com/pytest-dev/pytest-asyncio/blob/main/LICENSE |
+| https://pypi.org/project/pytest-cov/ | pytest-cov 7.1.0 | MIT | https://github.com/pytest-dev/pytest-cov/blob/master/LICENSE |
+| https://pypi.org/project/python-dateutil/ | python-dateutil 2.9.0.post0 | Apache-2.0 OR BSD-3-Clause | https://github.com/dateutil/dateutil/blob/master/LICENSE |
+| https://pypi.org/project/ruff/ | ruff 0.16.9 | MIT | https://github.com/astral-sh/ruff/blob/main/LICENSE |
+| https://pypi.org/project/six/ | six 1.17.0 | MIT | https://github.com/benjaminp/six/blob/main/LICENSE |
+| https://pypi.org/project/typing-extensions/ | typing-extensions 4.16.0 | PSF-2.0 | https://github.com/python/typing_extensions/blob/main/LICENSE |
+| https://pypi.org/project/tzdata/ | tzdata 2026.4 | Apache-2.0 | https://github.com/python/tzdata/blob/master/LICENSE |
+| https://pypi.org/project/setuptools/ | setuptools (build backend) | MIT | https://github.com/pypa/setuptools/blob/main/LICENSE |
+| https://github.com/actions/checkout | actions/checkout (GitHub Action) | MIT | https://github.com/actions/checkout/blob/main/LICENSE |
+| https://github.com/astral-sh/setup-uv | astral-sh/setup-uv (GitHub Action) | MIT | https://github.com/astral-sh/setup-uv/blob/main/LICENSE |

@@ -1,0 +1,76 @@
+[project]
+name = "plan-bot"
+version = "0.1.0"
+description = "Telegram + Discord bot for university timetables published as iCalendar (ICS) feeds"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Maciej Zieliński" }]
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "icalendar>=6.1",
+    "python-dateutil>=2.9",
+    "tzdata>=2024.1",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=5.0",
+    "ruff>=0.6",
+    # mypy >= 1.16 depends on pathspec (MPL-2.0); 1.15 is the last release without it.
+    "mypy==1.15.0",
+]
+
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+plan_bot = ["py.typed", "data/*.ics"]
+
+[tool.uv]
+# Only resolve releases that are at least two weeks old (bump deliberately).
+exclude-newer = "2026-09-26T00:00:00Z"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "UP", "SIM", "RUF", "ASYNC", "DTZ", "PT", "S"]
+ignore = ["S101"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S", "DTZ"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["src", "tests"]
+
+[[tool.mypy.overrides]]
+module = ["dateutil.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = "-q"
+filterwarnings = ["error"]
+
+[tool.coverage.run]
+source = ["plan_bot"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+fail_under = 85
+exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError", "if __name__ == .__main__.:"]
