@@ -1,0 +1,36 @@
+<!doctype html><meta charset="utf-8"><title>Discord demo</title>
+<style>
+body{margin:0;background:#313338;color:#dbdee1;font:15px/1.4 "gg sans","Segoe UI",Roboto,sans-serif}
+.window{width:640px;margin:0 auto}
+.head{padding:12px 16px;border-bottom:1px solid #1f2023;font-weight:600;color:#f2f3f5}
+.head span{color:#80848e;font-weight:400}
+.banner{background:#4e3d00;color:#ffd666;font-size:12px;text-align:center;padding:6px}
+.row{display:flex;gap:14px;padding:8px 16px}
+.av{flex:0 0 40px;height:40px;border-radius:50%;display:grid;place-items:center;color:#fff;font-weight:700}
+.who{font-weight:600;color:#f2f3f5} .ts{color:#949ba4;font-size:12px;font-weight:400;margin-left:8px}
+.tag{background:#5865f2;color:#fff;font-size:10px;padding:1px 4px;border-radius:3px;margin-left:6px}
+pre{margin:2px 0 0;white-space:pre-wrap;font:inherit}
+</style>
+<div class="window"><div class="head"># timetable <span>· study group server</span></div>
+<div class="banner">DEMO · mock-up rendered from real bot output · fictional timetable (no real university data)</div><div class="row"><div class="av" style="background:#3ba55c">S</div><div><div class="who">student<span class="ts">13.10.2026 09:05</span></div><pre>/setfeed demo</pre></div></div><div class="row"><div class="av" style="background:#5865f2">P</div><div><div class="who">plan-bot<span class="tag">APP</span><span class="ts">13.10.2026 09:05</span></div><pre>Timetable saved (bundled fictional demo timetable).
+160 upcoming classes found.
+Groups in this timetable: C1, C2, EN-B2, L1, L2
+Show only yours with e.g. /filter C1,C2
+Reminders are on, 15 min before each class.</pre></div></div><div class="row"><div class="av" style="background:#3ba55c">S</div><div><div class="who">student<span class="ts">13.10.2026 09:05</span></div><pre>/filter L2,C2</pre></div></div><div class="row"><div class="av" style="background:#5865f2">P</div><div><div class="who">plan-bot<span class="tag">APP</span><span class="ts">13.10.2026 09:05</span></div><pre>Filter set: L2,C2. Classes without a group are always shown.</pre></div></div><div class="row"><div class="av" style="background:#3ba55c">S</div><div><div class="who">student<span class="ts">13.10.2026 09:06</span></div><pre>/tomorrow</pre></div></div><div class="row"><div class="av" style="background:#5865f2">P</div><div><div class="who">plan-bot<span class="tag">APP</span><span class="ts">13.10.2026 09:06</span></div><pre>Tomorrow · Wednesday, 14 Oct
+09:00–10:30  Operating Systems (lecture)  (A-101)
+12:30–14:00  Operating Systems (lab)  (Lab 310 · L2)</pre></div></div><div class="row"><div class="av" style="background:#5865f2">P</div><div><div class="who">plan-bot<span class="tag">APP</span><span class="ts">18.10.2026 18:00</span></div><pre>Coming week Mon 19 Oct – Sun 25 Oct: 7 classes
+
+Monday, 19 Oct
+08:30–10:00  Algorithms and Data Structures (lecture)  (A-101)
+10:15–11:45  Algorithms and Data Structures (lab)  (Lab 205 · L2)
+
+Tuesday, 20 Oct
+12:00–13:30  Databases (lecture)  (Aula C)
+15:45–17:15  Databases (exercises)  (C-12 · C2)
+
+Wednesday, 21 Oct
+09:00–10:30  Operating Systems (lecture)  (A-101)
+12:30–14:00  Operating Systems (lab)  (Lab 310 · L2)
+
+Thursday, 22 Oct
+17:45–19:15  Discrete Mathematics (exercises)  (C-07 · C2)</pre></div></div></div>
