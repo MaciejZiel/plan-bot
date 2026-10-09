@@ -15,6 +15,7 @@ Only permissive licenses are accepted (no GPL/LGPL/AGPL/MPL/EPL/SSPL/CDDL).
 | https://pypi.org/project/attrs/ | attrs 26.1.0 | MIT | https://github.com/python-attrs/attrs/blob/main/LICENSE |
 | https://pypi.org/project/colorama/ | colorama 0.4.6 | BSD-3-Clause | https://github.com/tartley/colorama/blob/master/LICENSE.txt |
 | https://pypi.org/project/coverage/ | coverage 7.16.1 | Apache-2.0 | https://github.com/coveragepy/coveragepy/blob/main/LICENSE.txt |
+| https://pypi.org/project/discord.py/ | discord.py 2.7.1 | MIT | https://github.com/Rapptz/discord.py/blob/master/LICENSE |
 | https://pypi.org/project/frozenlist/ | frozenlist 1.8.0 | Apache-2.0 | https://github.com/aio-libs/frozenlist/blob/master/LICENSE |
 | https://pypi.org/project/greenlet/ | greenlet 3.5.6 | MIT AND PSF-2.0 | https://github.com/python-greenlet/greenlet/blob/master/LICENSE |
 | https://pypi.org/project/icalendar/ | icalendar 7.3.0 | BSD-2-Clause | https://github.com/collective/icalendar/blob/main/LICENSE.rst |
