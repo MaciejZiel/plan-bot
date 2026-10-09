@@ -60,6 +60,15 @@ class GroupFilter:
             return cls()
         return cls(frozenset(t.casefold() for t in _SPLIT.split(raw) if t))
 
+    @staticmethod
+    def clean(raw: str) -> str:
+        """Normalise user input to ``A,B`` keeping the original spelling."""
+        seen: dict[str, str] = {}
+        for token in _SPLIT.split(raw):
+            if token:
+                seen.setdefault(token.casefold(), token)
+        return ",".join(seen.values())
+
     def serialize(self) -> str:
         return ",".join(sorted(self.tokens))
 
