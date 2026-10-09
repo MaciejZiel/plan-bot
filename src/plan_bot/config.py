@@ -42,6 +42,8 @@ def _bool(env: Mapping[str, str], name: str, default: bool) -> bool:
 class Settings:
     telegram_token: str | None = None
     discord_token: str | None = None
+    #: Optional: sync slash commands to one server instantly instead of globally.
+    discord_guild_id: int | None = None
     database_url: str = DEFAULT_DATABASE_URL
     timezone: ZoneInfo = field(default_factory=lambda: ZoneInfo("Europe/Warsaw"))
     #: How often each feed is downloaded again.
@@ -76,6 +78,7 @@ class Settings:
         return cls(
             telegram_token=env.get("TELEGRAM_BOT_TOKEN", "").strip() or None,
             discord_token=env.get("DISCORD_BOT_TOKEN", "").strip() or None,
+            discord_guild_id=_int(env, "DISCORD_GUILD_ID", 0) or None,
             database_url=env.get("DATABASE_URL", "").strip() or DEFAULT_DATABASE_URL,
             timezone=tz,
             refresh_minutes=_int(env, "PLAN_BOT_REFRESH_MINUTES", 30, minimum=5),

@@ -47,8 +47,17 @@ def test_cli(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 
     monkeypatch.setattr("plan_bot.console.run_console", fake_console)
     assert main(["console"]) == 0
-    assert main([]) == 0
     assert seen == {"start_at": None}
+
+    monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
+    monkeypatch.delenv("DISCORD_BOT_TOKEN", raising=False)
+    assert main([]) == 1
+    assert "TELEGRAM_BOT_TOKEN" in capsys.readouterr().out
+
+    upgraded: list[str] = []
+    monkeypatch.setattr("plan_bot.db.upgrade", upgraded.append)
+    assert main(["migrate"]) == 0
+    assert len(upgraded) == 1
 
     monkeypatch.setenv("PLAN_BOT_TIMEZONE", "Nowhere/Land")
     assert main(["console"]) == 2
