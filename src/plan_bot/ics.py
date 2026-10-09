@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Iterable, Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, time, timedelta, tzinfo
 from typing import Any
 
@@ -91,7 +91,18 @@ def expand(data: bytes | str, window: Window, default_tz: tzinfo) -> list[Lesson
                 lessons.append(lesson)
 
     lessons.sort(key=lambda les: (les.start, les.summary, les.key))
-    return lessons
+    return _unique_keys(lessons)
+
+
+def _unique_keys(lessons: list[Lesson]) -> list[Lesson]:
+    """Feeds sometimes reuse a UID for unrelated events; keep keys unique."""
+    seen: dict[str, int] = {}
+    out: list[Lesson] = []
+    for lesson in lessons:
+        count = seen.get(lesson.key, 0)
+        seen[lesson.key] = count + 1
+        out.append(replace(lesson, key=f"{lesson.key}#{count}") if count else lesson)
+    return out
 
 
 def _expand_series(
