@@ -6,6 +6,7 @@ Discord and the local console.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Iterable
 from datetime import date, datetime, timedelta, tzinfo
 
@@ -36,7 +37,7 @@ def span(lesson: Lesson, tz: tzinfo) -> str:
 
 
 def humanize(delta: timedelta) -> str:
-    minutes = max(0, int(delta.total_seconds() // 60))
+    minutes = max(0, math.ceil(delta.total_seconds() / 60))
     days, rem = divmod(minutes, 24 * 60)
     hours, mins = divmod(rem, 60)
     if days:

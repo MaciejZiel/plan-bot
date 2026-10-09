@@ -108,13 +108,21 @@ class Repository:
             stmt = select(Subscription).where(Subscription.ics_url.is_not(None))
             return list((await session.scalars(stmt.order_by(Subscription.id))).all())
 
-    async def lessons(self, subscription_id: int) -> list[Lesson]:
+    async def lessons(
+        self,
+        subscription_id: int,
+        *,
+        start: datetime | None = None,
+        end: datetime | None = None,
+    ) -> list[Lesson]:
+        """Stored lessons, optionally only those starting in ``[start, end]``."""
         async with self._sessions() as session:
-            stmt = (
-                select(LessonRow)
-                .where(LessonRow.subscription_id == subscription_id)
-                .order_by(LessonRow.start, LessonRow.summary)
-            )
+            stmt = select(LessonRow).where(LessonRow.subscription_id == subscription_id)
+            if start is not None:
+                stmt = stmt.where(LessonRow.start >= start)
+            if end is not None:
+                stmt = stmt.where(LessonRow.start <= end)
+            stmt = stmt.order_by(LessonRow.start, LessonRow.summary)
             return [_to_lesson(row) for row in (await session.scalars(stmt)).all()]
 
     async def replace_lessons(
