@@ -32,3 +32,17 @@ jobs:
         run: uv run mypy
       - name: Pytest
         run: uv run pytest --cov --cov-report=term-missing --cov-report=xml
+
+  docker:
+    name: docker image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build
+        run: docker build -t plan-bot:ci .
+      - name: Smoke test
+        run: |
+          printf '/setfeed demo\n/next\n' \
+            | docker run --rm -i plan-bot:ci console --at 2026-10-12T08:00 \
+            | tee out.txt
+          grep -q "Next: Algorithms and Data Structures" out.txt
