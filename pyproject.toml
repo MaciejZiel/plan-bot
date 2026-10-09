@@ -11,7 +11,13 @@ dependencies = [
     "icalendar>=6.1",
     "python-dateutil>=2.9",
     "tzdata>=2024.1",
+    "SQLAlchemy[asyncio]>=2.0.30",
+    "alembic>=1.13",
+    "aiosqlite>=0.20",
 ]
+
+[project.optional-dependencies]
+postgres = ["asyncpg>=0.29"]
 
 [dependency-groups]
 dev = [
@@ -31,7 +37,7 @@ build-backend = "setuptools.build_meta"
 where = ["src"]
 
 [tool.setuptools.package-data]
-plan_bot = ["py.typed", "data/*.ics"]
+plan_bot = ["py.typed", "data/*.ics", "migrations/*.py", "migrations/*.mako", "migrations/versions/*.py"]
 
 [tool.uv]
 # Only resolve releases that are at least two weeks old (bump deliberately).

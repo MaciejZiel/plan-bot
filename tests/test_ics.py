@@ -159,3 +159,13 @@ def test_window_contains_is_half_open() -> None:
     w = Window(warsaw(2026, 1, 1), warsaw(2026, 1, 2))
     assert w.contains(warsaw(2026, 1, 1))
     assert not w.contains(warsaw(2026, 1, 2))
+
+
+def test_duplicate_uids_get_unique_keys() -> None:
+    data = (
+        "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:x\n"
+        "BEGIN:VEVENT\nUID:dup\nDTSTART:20261012T080000Z\nSUMMARY:A\nEND:VEVENT\n"
+        "BEGIN:VEVENT\nUID:dup\nDTSTART:20261013T080000Z\nSUMMARY:B\nEND:VEVENT\n"
+        "END:VCALENDAR\n"
+    )
+    assert [les.key for les in expand(data, WIDE, WARSAW)] == ["dup", "dup#1"]

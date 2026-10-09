@@ -6,10 +6,16 @@ Only permissive licenses are accepted (no GPL/LGPL/AGPL/MPL/EPL/SSPL/CDDL).
 
 | source | name | license type | license link |
 |---|---|---|---|
+| https://pypi.org/project/aiosqlite/ | aiosqlite 0.22.1 | MIT | https://github.com/omnilib/aiosqlite/blob/main/LICENSE |
+| https://pypi.org/project/alembic/ | alembic 1.20.0 | MIT | https://github.com/sqlalchemy/alembic/blob/main/LICENSE |
+| https://pypi.org/project/asyncpg/ | asyncpg 0.31.0 | Apache-2.0 | https://github.com/MagicStack/asyncpg/blob/master/LICENSE |
 | https://pypi.org/project/colorama/ | colorama 0.4.6 | BSD-3-Clause | https://github.com/tartley/colorama/blob/master/LICENSE.txt |
 | https://pypi.org/project/coverage/ | coverage 7.16.1 | Apache-2.0 | https://github.com/coveragepy/coveragepy/blob/main/LICENSE.txt |
+| https://pypi.org/project/greenlet/ | greenlet 3.5.6 | MIT AND PSF-2.0 | https://github.com/python-greenlet/greenlet/blob/master/LICENSE |
 | https://pypi.org/project/icalendar/ | icalendar 7.3.0 | BSD-2-Clause | https://github.com/collective/icalendar/blob/main/LICENSE.rst |
 | https://pypi.org/project/iniconfig/ | iniconfig 2.3.0 | MIT | https://github.com/pytest-dev/iniconfig/blob/main/LICENSE |
+| https://pypi.org/project/Mako/ | Mako 1.4.3 | MIT | https://github.com/sqlalchemy/mako/blob/main/LICENSE |
+| https://pypi.org/project/MarkupSafe/ | MarkupSafe 3.0.3 | BSD-3-Clause | https://github.com/pallets/markupsafe/blob/main/LICENSE.txt |
 | https://pypi.org/project/mypy/ | mypy 1.15.0 | MIT | https://github.com/python/mypy/blob/master/LICENSE |
 | https://pypi.org/project/mypy-extensions/ | mypy-extensions 1.1.0 | MIT | https://github.com/python/mypy_extensions/blob/master/LICENSE |
 | https://pypi.org/project/packaging/ | packaging 26.3 | Apache-2.0 OR BSD-2-Clause | https://github.com/pypa/packaging/blob/main/LICENSE |
@@ -21,6 +27,7 @@ Only permissive licenses are accepted (no GPL/LGPL/AGPL/MPL/EPL/SSPL/CDDL).
 | https://pypi.org/project/python-dateutil/ | python-dateutil 2.9.0.post0 | Apache-2.0 OR BSD-3-Clause | https://github.com/dateutil/dateutil/blob/master/LICENSE |
 | https://pypi.org/project/ruff/ | ruff 0.16.9 | MIT | https://github.com/astral-sh/ruff/blob/main/LICENSE |
 | https://pypi.org/project/six/ | six 1.17.0 | MIT | https://github.com/benjaminp/six/blob/main/LICENSE |
+| https://pypi.org/project/SQLAlchemy/ | SQLAlchemy 2.1.1 | MIT | https://github.com/sqlalchemy/sqlalchemy/blob/main/LICENSE |
 | https://pypi.org/project/typing-extensions/ | typing-extensions 4.16.0 | PSF-2.0 | https://github.com/python/typing_extensions/blob/main/LICENSE |
 | https://pypi.org/project/tzdata/ | tzdata 2026.4 | Apache-2.0 | https://github.com/python/tzdata/blob/master/LICENSE |
 | https://pypi.org/project/setuptools/ | setuptools (build backend) | MIT | https://github.com/pypa/setuptools/blob/main/LICENSE |
