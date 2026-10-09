@@ -9,6 +9,7 @@ authors = [{ name = "Maciej Zieliński" }]
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "aiohttp>=3.10",
+    "discord.py>=2.4",
     "icalendar>=6.1",
     "python-dateutil>=2.9",
     "tzdata>=2024.1",
@@ -74,7 +75,11 @@ testpaths = ["tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 addopts = "-q"
-filterwarnings = ["error"]
+filterwarnings = [
+    "error",
+    # discord.py imports the stdlib audioop module on Python 3.12.
+    "ignore:'audioop' is deprecated:DeprecationWarning",
+]
 
 [tool.coverage.run]
 source = ["plan_bot"]
