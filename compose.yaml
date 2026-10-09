@@ -1,0 +1,27 @@
+# docker compose up -d --build          -> bot with SQLite in a named volume
+# docker compose --profile postgres up -d --build
+#   -> also starts PostgreSQL; set DATABASE_URL in .env to
+#      postgresql+asyncpg://planbot:planbot@postgres:5432/planbot
+services:
+  bot:
+    build: .
+    image: plan-bot:local
+    env_file: .env
+    volumes:
+      - plan-bot-data:/data
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:17-alpine
+    profiles: ["postgres"]
+    environment:
+      POSTGRES_USER: planbot
+      POSTGRES_PASSWORD: planbot
+      POSTGRES_DB: planbot
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  plan-bot-data:
+  postgres-data:

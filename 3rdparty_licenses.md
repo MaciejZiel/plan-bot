@@ -43,3 +43,6 @@ Only permissive licenses are accepted (no GPL/LGPL/AGPL/MPL/EPL/SSPL/CDDL).
 | https://pypi.org/project/setuptools/ | setuptools (build backend) | MIT | https://github.com/pypa/setuptools/blob/main/LICENSE |
 | https://github.com/actions/checkout | actions/checkout (GitHub Action) | MIT | https://github.com/actions/checkout/blob/main/LICENSE |
 | https://github.com/astral-sh/setup-uv | astral-sh/setup-uv (GitHub Action) | MIT | https://github.com/astral-sh/setup-uv/blob/main/LICENSE |
+| https://github.com/astral-sh/uv | uv (Docker build stage) | Apache-2.0 OR MIT | https://github.com/astral-sh/uv/blob/main/LICENSE-MIT |
+| https://hub.docker.com/_/python | python:3.12-slim (Docker base image, CPython) | PSF-2.0 | https://docs.python.org/3/license.html |
+| https://hub.docker.com/_/postgres | postgres:17-alpine (optional compose service) | PostgreSQL | https://www.postgresql.org/about/licence/ |

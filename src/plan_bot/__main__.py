@@ -19,7 +19,10 @@ def _moment(value: str) -> datetime:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="plan-bot", description=__doc__)
+    parser = argparse.ArgumentParser(
+        prog="plan-bot",
+        description="University timetable bot for Telegram and Discord, driven by ICS feeds.",
+    )
     sub = parser.add_subparsers(dest="command")
     sub.add_parser("run", help="start the Telegram and/or Discord bot (default)")
     sub.add_parser("migrate", help="apply database migrations and exit")
