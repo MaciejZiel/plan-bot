@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/MaciejZiel/plan-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/MaciejZiel/plan-bot/actions/workflows/ci.yml)
 ![Python 3.12](https://img.shields.io/badge/python-3.12-3776ab)
-![Coverage ≥ 85%](https://img.shields.io/badge/coverage-98%25-brightgreen)
+![Coverage 98%](https://img.shields.io/badge/coverage-98%25-brightgreen)
 ![Ruff + mypy strict](https://img.shields.io/badge/lint-ruff%20%2B%20mypy%20strict-informational)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
@@ -192,7 +192,8 @@ change-alert horizon, summary day and hour, download size limit and timeout.
   another adapter.
 - **Own Telegram client instead of a framework.** python-telegram-bot is LGPL-3.0, and aiogram
   depends on certifi (MPL-2.0). The project only accepts permissive licenses, and the bot needs
-  just four Bot API methods, so it uses ~100 lines on top of aiohttp.
+  just four Bot API methods, so it uses a small client (about 150 lines including the
+  adapter) on top of aiohttp.
 - **Recurrence with `python-dateutil`, not `recurring-ical-events`.** The latter is LGPL. Series
   are expanded in the event's local wall-clock time, so a class at 08:30 stays at 08:30 across
   DST switches. Times in the spring-forward gap are shifted the way calendar apps do it, and
@@ -223,8 +224,8 @@ uv run pytest --cov               # fails under 85 % coverage
 uv run python scripts/render_demo_chats.py docs/screenshots   # regenerate the demo mock-ups
 ```
 
-The suite has **117 tests** with **98% line coverage** (CI fails below 85%) and runs in about
-10 seconds. All tests use fictional fixtures (`tests/fixtures/*.ics` and the bundled sample).
+The suite has **117 tests** with **98% line coverage** (CI fails below 85%) and runs in a few
+seconds. All tests use fictional fixtures (`tests/fixtures/*.ics` and the bundled sample).
 They cover:
 
 - weekly, interval and daily rules, `EXDATE` (also written in UTC) and `RDATE`-only series
