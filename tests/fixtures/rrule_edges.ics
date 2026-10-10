@@ -1,0 +1,65 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//plan-bot//recurrence edge cases (fictional)//EN
+BEGIN:VEVENT
+UID:allday-series@fixture.example
+DTSTART;VALUE=DATE:20261102
+RRULE:FREQ=WEEKLY;COUNT=3
+SUMMARY:All-day recurring holiday block
+END:VEVENT
+BEGIN:VEVENT
+UID:rdate-only@fixture.example
+DTSTART;TZID=Europe/Warsaw:20261103T100000
+DTEND;TZID=Europe/Warsaw:20261103T113000
+RDATE;TZID=Europe/Warsaw:20261110T100000,20261117T120000
+SUMMARY:Make-up sessions given as RDATE only
+END:VEVENT
+BEGIN:VEVENT
+UID:duration-series@fixture.example
+DTSTART;TZID=Europe/Warsaw:20270322T173000
+DURATION:PT1H30M
+RRULE:FREQ=WEEKLY;COUNT=3
+EXDATE:20270329T153000Z
+SUMMARY:Evening series with DURATION across spring DST
+END:VEVENT
+BEGIN:VEVENT
+UID:duration-series@fixture.example
+RECURRENCE-ID;TZID=Europe/Warsaw:20270405T173000
+DTSTART;TZID=Europe/Warsaw:20270405T180000
+SUMMARY:Evening series with DURATION across spring DST
+LOCATION:Moved room
+END:VEVENT
+BEGIN:VEVENT
+UID:override-duration@fixture.example
+DTSTART;TZID=Europe/Warsaw:20261104T080000
+DTEND;TZID=Europe/Warsaw:20261104T093000
+RRULE:FREQ=WEEKLY;COUNT=2
+SUMMARY:Override carrying its own DURATION
+END:VEVENT
+BEGIN:VEVENT
+UID:override-duration@fixture.example
+RECURRENCE-ID;TZID=Europe/Warsaw:20261111T080000
+DTSTART;TZID=Europe/Warsaw:20261111T090000
+DURATION:PT45M
+SUMMARY:Override carrying its own DURATION
+END:VEVENT
+BEGIN:VEVENT
+UID:until-date@fixture.example
+DTSTART;TZID=Europe/Warsaw:20261019T140000
+DTEND;TZID=Europe/Warsaw:20261019T153000
+RRULE:FREQ=WEEKLY;UNTIL=20261102
+SUMMARY:Weekly with a date-only UNTIL spanning the autumn switch
+END:VEVENT
+BEGIN:VEVENT
+UID:orphan-allday@fixture.example
+RECURRENCE-ID;VALUE=DATE:20261105
+DTSTART;VALUE=DATE:20261105
+SUMMARY:All-day orphan override
+END:VEVENT
+BEGIN:VEVENT
+UID:backwards@fixture.example
+DTSTART;TZID=Europe/Warsaw:20261106T120000
+DTEND;TZID=Europe/Warsaw:20261106T110000
+SUMMARY:End before start falls back to the default length
+END:VEVENT
+END:VCALENDAR
