@@ -135,3 +135,27 @@ async def test_api_errors_do_not_leak_token() -> None:
             await api.get_me()
     assert TOKEN not in str(info.value)
     assert info.value.retry_after is None
+
+
+class EchoRouter:
+    def __init__(self) -> None:
+        self.seen: list[tuple[ChatRef, str]] = []
+
+    async def handle_text(self, chat: ChatRef, text: str) -> str | None:
+        self.seen.append((chat, text))
+        return "" if text.startswith("/quiet") else f"echo {text}"
+
+
+async def test_handle_update_filters_noise(bot_api: tuple[FakeBotApi, TelegramApi]) -> None:
+    fake, api = bot_api
+    router = EchoRouter()
+    adapter = TelegramAdapter(api, router)  # type: ignore[arg-type]
+    await adapter.handle_update({"update_id": 1, "message": {"chat": {"id": 1}}})  # no text
+    await adapter.handle_update({"update_id": 2, "message": {"text": "/today"}})  # no chat
+    await adapter.handle_update({"update_id": 3, "message": "garbage"})
+    # Before getMe the username is unknown, so a mention cannot be checked: answer it.
+    await adapter.handle_update(message(4, "/today@AnyBot", chat_id=-100))
+    await adapter.handle_update(message(5, "/quiet"))
+    assert [text for _, text in router.seen] == ["/today@AnyBot", "/quiet"]
+    assert router.seen[0][0] == ChatRef("telegram", "-100")
+    assert [m["text"] for m in fake.sent] == ["echo /today@AnyBot"]
