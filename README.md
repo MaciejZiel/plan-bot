@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/MaciejZiel/plan-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/MaciejZiel/plan-bot/actions/workflows/ci.yml)
 ![Python 3.12](https://img.shields.io/badge/python-3.12-3776ab)
-![Coverage ≥ 85%](https://img.shields.io/badge/coverage-97%25-brightgreen)
+![Coverage ≥ 85%](https://img.shields.io/badge/coverage-98%25-brightgreen)
 ![Ruff + mypy strict](https://img.shields.io/badge/lint-ruff%20%2B%20mypy%20strict-informational)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
@@ -223,10 +223,16 @@ uv run pytest --cov               # fails under 85 % coverage
 uv run python scripts/render_demo_chats.py docs/screenshots   # regenerate the demo mock-ups
 ```
 
-The tests run against fictional fixtures (`tests/fixtures/*.ics` and the bundled sample). They
-cover weekly/interval/daily rules, `EXDATE`, `RDATE`, overrides, cancellations, both DST
-transitions, UTC and floating times, a feed before and after edits, a fake Telegram Bot API
-server, and Discord slash-command callbacks.
+The suite has **117 tests** with **98% line coverage** (CI fails below 85%) and runs in about
+10 seconds. All tests use fictional fixtures (`tests/fixtures/*.ics` and the bundled sample).
+They cover:
+
+- weekly, interval and daily rules, `EXDATE` (also written in UTC) and `RDATE`-only series
+- overrides with inherited or their own durations, and cancellations
+- both DST transitions (the repeated hour and the spring-forward gap), date-only `UNTIL`, and
+  UTC and floating times
+- a feed before and after edits
+- a fake Telegram Bot API server and the Discord slash-command callbacks
 
 ## Limitations
 
@@ -240,6 +246,10 @@ server, and Discord slash-command callbacks.
 - The SSRF check resolves the host before connecting, but it does not pin the resolved address
   (DNS rebinding is out of scope for a self-hosted bot).
 - The scheduler runs inside one process, so run a single instance per database.
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 
