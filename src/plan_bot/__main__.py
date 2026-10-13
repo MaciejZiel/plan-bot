@@ -9,6 +9,7 @@ from collections.abc import Sequence
 from datetime import datetime
 
 from plan_bot.config import ConfigError, Settings
+from plan_bot.logging_setup import configure_logging
 
 
 def _moment(value: str) -> datetime:
@@ -43,10 +44,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     except ConfigError as exc:
         print(f"configuration error: {exc}")
         return 2
-    logging.basicConfig(
-        level=settings.log_level, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
-    )
-    logging.getLogger("alembic").setLevel(logging.WARNING)
+    configure_logging(settings.log_level, settings.log_format)
     command = args.command or "run"
     if command == "console":
         from plan_bot.console import run_console

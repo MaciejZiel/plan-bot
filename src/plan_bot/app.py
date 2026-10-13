@@ -7,10 +7,13 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime
 
+from sqlalchemy.ext.asyncio import AsyncEngine
+
 from plan_bot.commands import CommandRouter
 from plan_bot.config import Settings
 from plan_bot.db import create_engine, migrate, session_factory
 from plan_bot.fetch import Fetcher
+from plan_bot.ratelimit import RateLimiter
 from plan_bot.repository import Repository
 from plan_bot.scheduler import Scheduler
 from plan_bot.service import BotService, Notifier, utc_now
@@ -21,6 +24,7 @@ class App:
     service: BotService
     router: CommandRouter
     scheduler: Scheduler
+    engine: AsyncEngine
 
 
 def shifted_clock(start_at: datetime | None) -> Callable[[], datetime]:
@@ -51,7 +55,8 @@ async def build_app(
             Repository(session_factory(engine)), fetcher, settings, clock=clock, notifier=notifier
         )
         scheduler = Scheduler(service, tick_seconds=settings.tick_seconds, clock=clock)
-        yield App(service, CommandRouter(service), scheduler)
+        limiter = RateLimiter(burst=settings.rate_burst, per_minute=settings.rate_per_minute)
+        yield App(service, CommandRouter(service, limiter=limiter), scheduler, engine)
     finally:
         await fetcher.close()
         await engine.dispose()
