@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 import pytest
 
@@ -41,3 +41,25 @@ def test_group_filter_matching() -> None:
     assert lesson(groups=("X",)).matches(GroupFilter.parse("group"))  # word in summary
     assert lesson(groups=()).matches(GroupFilter.parse("l2"))  # shared lecture
     assert lesson().duration.total_seconds() == 3600
+
+
+@pytest.mark.parametrize(
+    ("description", "teacher"),
+    [
+        ("Lecturer: Dr Ada Example", "Dr Ada Example"),
+        ("Prowadzący: mgr Jan Przykład; sala 5", "mgr Jan Przykład"),
+        ("Room notes\nTeacher : Prof. X", "Prof. X"),
+        ("Bring a laptop", ""),
+        ("", ""),
+    ],
+)
+def test_teacher_is_read_from_the_description(description: str, teacher: str) -> None:
+    lesson = Lesson(
+        key="k",
+        uid="u",
+        start=datetime(2026, 10, 12, 8, tzinfo=UTC),
+        end=datetime(2026, 10, 12, 9, tzinfo=UTC),
+        summary="Maths",
+        description=description,
+    )
+    assert lesson.teacher == teacher
