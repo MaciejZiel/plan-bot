@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from plan_bot.i18n import DEFAULT_LANG, LANG_NAMES, LANGS, tr
 from plan_bot.ratelimit import RateLimiter
 from plan_bot.repository import ChatRef
 from plan_bot.service import BotService, NoFeedError, UserError
+from plan_bot.views import View, render_text
 
 log = logging.getLogger(__name__)
 
@@ -74,6 +75,10 @@ class Button:
 class Reply:
     text: str
     buttons: tuple[tuple[Button, ...], ...] = ()
+    #: Structured result for platforms that can render more than text (Discord embeds).
+    view: View | None = None
+    #: Language the reply is written in.
+    lang: str = DEFAULT_LANG
 
 
 def intro_text(lang: str = DEFAULT_LANG) -> str:
@@ -134,6 +139,12 @@ class CommandRouter:
         self.service = service
         self.limiter = limiter
         s = service
+        self._views: dict[str, Callable[[ChatRef, str | None], Awaitable[View]]] = {
+            "today": lambda chat, _: s.today_view(chat),
+            "tomorrow": lambda chat, _: s.tomorrow_view(chat),
+            "next": lambda chat, _: s.next_view(chat),
+            "week": s.week_view,
+        }
         self._handlers: dict[str, Callable[[ChatRef, str | None], Awaitable[str]]] = {
             "today": lambda chat, _: s.today(chat),
             "tomorrow": lambda chat, _: s.tomorrow(chat),
@@ -174,10 +185,12 @@ class CommandRouter:
                 return Reply(tr(lang, "rate_limited", seconds=wait))
         try:
             await self.service.adopt_language(chat, locale)
-            return await self._run(chat, name, arg)
+            reply = await self._run(chat, name, arg)
+            return replace(reply, lang=await self.service.language(chat))
         except Exception:
             log.exception("command failed", extra={"command": name, "platform": chat.platform})
-            return Reply(tr(await self.service.language(chat), "internal_error"))
+            lang = await self.service.language(chat)
+            return Reply(tr(lang, "internal_error"), lang=lang)
 
     async def _run(self, chat: ChatRef, name: str, arg: str | None) -> Reply:
         lang = await self.service.language(chat)
@@ -186,8 +199,13 @@ class CommandRouter:
         handler = self._handlers.get(name)
         if handler is None:
             return Reply(tr(lang, "unknown_command", name=name))
+        view: View | None = None
         try:
-            text = await handler(chat, arg)
+            if name in self._views:
+                view = await self._views[name](chat, arg)
+                text = render_text(view)
+            else:
+                text = await handler(chat, arg)
         except NoFeedError as exc:
             return Reply(str(exc), ((Button(tr(lang, "btn.demo"), "/demo"),),))
         except UserError as exc:
@@ -195,7 +213,7 @@ class CommandRouter:
         # The language may just have been changed by the command itself.
         lang = await self.service.language(chat)
         log.info("command", extra={"command": name, "platform": chat.platform})
-        return Reply(text, await self._buttons_after(chat, name, lang))
+        return Reply(text, await self._buttons_after(chat, name, lang), view)
 
     async def _intro(self, chat: ChatRef, name: str, lang: str) -> Reply:
         text = intro_text(lang) if name == "start" else help_text(lang)

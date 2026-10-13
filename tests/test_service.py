@@ -11,6 +11,7 @@ from plan_bot.config import Settings
 from plan_bot.ics import IcsError
 from plan_bot.repository import ChatRef, Repository
 from plan_bot.service import BotService, ChatUnavailable, UserError
+from plan_bot.views import View
 from tests.conftest import FakeClock, FakeFeeds, RecordingNotifier, fixture_bytes, warsaw
 
 CHAT = ChatRef("telegram", "100")
@@ -236,7 +237,7 @@ async def test_blocked_chats_are_forgotten(
 ) -> None:
     await service.set_feed(CHAT, "demo")
 
-    async def gone(chat: ChatRef, text: str) -> None:
+    async def gone(chat: ChatRef, text: str, view: View | None = None) -> None:
         raise ChatUnavailable("bot was blocked")
 
     service.notifier.send = gone  # type: ignore[method-assign]
@@ -305,7 +306,7 @@ async def test_weekly_summary_to_a_blocked_chat_does_not_recreate_it(
 ) -> None:
     await service.set_feed(CHAT, "demo")
 
-    async def gone(chat: ChatRef, text: str) -> None:
+    async def gone(chat: ChatRef, text: str, view: View | None = None) -> None:
         raise ChatUnavailable("bot was blocked")
 
     service.notifier.send = gone  # type: ignore[method-assign]
@@ -379,7 +380,7 @@ async def test_logs_use_a_keyed_pseudonym_instead_of_the_chat_id(
     other_key = BotService(repo, FakeFeeds(), settings, clock=clock)
     await service.set_feed(CHAT, "demo")
 
-    async def gone(chat: ChatRef, text: str) -> None:
+    async def gone(chat: ChatRef, text: str, view: View | None = None) -> None:
         raise ChatUnavailable("bot was blocked")
 
     service.notifier.send = gone  # type: ignore[method-assign]

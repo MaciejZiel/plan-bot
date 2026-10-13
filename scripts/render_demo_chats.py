@@ -24,6 +24,7 @@ from plan_bot.db import create_engine, migrate, session_factory
 from plan_bot.fetch import demo_calendar
 from plan_bot.repository import ChatRef, Repository
 from plan_bot.service import BotService
+from plan_bot.views import View
 
 TZ = ZoneInfo("Europe/Warsaw")
 FEED = "https://timetable.example.edu/ical/your-personal-token.ics"
@@ -83,7 +84,7 @@ class Recorder:
         self.bubbles: list[Bubble] = []
         self.platform = "telegram"
 
-    async def send(self, chat: ChatRef, text: str) -> None:
+    async def send(self, chat: ChatRef, text: str, view: View | None = None) -> None:
         if chat.platform == self.platform:
             self.bubbles.append(Bubble("bot", text, self.clock.now))
 

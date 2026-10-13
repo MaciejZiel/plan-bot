@@ -12,6 +12,7 @@ from plan_bot.app import build_app, shifted_clock
 from plan_bot.commands import intro_text
 from plan_bot.config import Settings
 from plan_bot.repository import ChatRef
+from plan_bot.views import View
 
 CONSOLE_CHAT = ChatRef("console", "local")
 
@@ -20,7 +21,7 @@ class ConsoleNotifier:
     def __init__(self, out: TextIO) -> None:
         self.out = out
 
-    async def send(self, chat: ChatRef, text: str) -> None:
+    async def send(self, chat: ChatRef, text: str, view: View | None = None) -> None:
         self.out.write(f"\n[notification]\n{text}\n> ")
         self.out.flush()
 

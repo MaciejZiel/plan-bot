@@ -6,6 +6,11 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
+_TEACHER = re.compile(
+    r"(?:lecturer|teacher|instructor|tutor|prowadz\w*|wykładowca|dydaktyk)\s*:\s*([^\n;]+)",
+    re.IGNORECASE,
+)
+
 
 @dataclass(frozen=True, slots=True)
 class Lesson:
@@ -34,6 +39,12 @@ class Lesson:
     @property
     def duration(self) -> timedelta:
         return self.end - self.start
+
+    @property
+    def teacher(self) -> str:
+        """The lecturer named in the description (``Lecturer: ...``), if any."""
+        match = _TEACHER.search(self.description)
+        return match.group(1).strip() if match else ""
 
     def matches(self, group_filter: GroupFilter) -> bool:
         return group_filter.matches(self)
