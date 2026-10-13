@@ -36,6 +36,8 @@ class RateLimiter:
 
     def check(self, key: str, cost: float = 1) -> int:
         """Spend ``cost`` tokens; returns 0 if allowed, else seconds until it would be."""
+        # A command dearer than the whole bucket could otherwise never run.
+        cost = min(cost, self.burst)
         now = self.clock()
         bucket = self._buckets.get(key)
         if bucket is None:

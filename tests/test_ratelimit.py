@@ -40,3 +40,12 @@ def test_idle_buckets_are_evicted() -> None:
     busy.check("new")  # nothing is idle: the oldest tenth goes
     assert "0" not in busy._buckets
     assert "new" in busy._buckets
+
+
+def test_cost_above_the_burst_is_still_possible() -> None:
+    now = [0.0]
+    limiter = RateLimiter(burst=2, per_minute=60, clock=lambda: now[0])
+    assert limiter.check("chat", cost=4) == 0
+    assert limiter.check("chat", cost=4) == 2
+    now[0] += 2
+    assert limiter.check("chat", cost=4) == 0
