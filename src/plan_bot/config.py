@@ -60,7 +60,7 @@ class Settings:
     summary_weekday: int = 6
     summary_hour: int = 18
     max_ics_bytes: int = 5_000_000
-    http_timeout_seconds: int = 20
+    http_timeout_seconds: int = 10
     #: Identical feed URLs requested within this many seconds share one download.
     fetch_cache_seconds: int = 120
     #: Allow feeds on private/loopback addresses (off by default to prevent SSRF).
@@ -112,7 +112,7 @@ class Settings:
             summary_weekday=weekday,
             summary_hour=hour,
             max_ics_bytes=_int(env, "PLAN_BOT_MAX_ICS_BYTES", 5_000_000, minimum=1024),
-            http_timeout_seconds=_int(env, "PLAN_BOT_HTTP_TIMEOUT", 20, minimum=1),
+            http_timeout_seconds=_int(env, "PLAN_BOT_HTTP_TIMEOUT", 10, minimum=1),
             fetch_cache_seconds=_int(env, "PLAN_BOT_FETCH_CACHE_SECONDS", 120),
             allow_private_urls=_bool(env, "PLAN_BOT_ALLOW_PRIVATE_URLS", False),
             log_level=env.get("PLAN_BOT_LOG_LEVEL", "INFO").strip().upper() or "INFO",

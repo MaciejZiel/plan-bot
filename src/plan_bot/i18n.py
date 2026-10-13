@@ -342,6 +342,10 @@ _M: dict[str, dict[str, str]] = {
         "pl": "Link zawiera spacje lub znaki sterujące",
     },
     "url.invalid": {"en": "The link is not a valid URL", "pl": "To nie jest poprawny link"},
+    "url.port": {
+        "en": "The link must use port 80, 443, 8080 or 8443",
+        "pl": "Link musi używać portu 80, 443, 8080 lub 8443",
+    },
     "url.scheme": {
         "en": "The link must start with https://, http:// or webcal://",
         "pl": "Link musi zaczynać się od https://, http:// lub webcal://",
@@ -355,7 +359,7 @@ _M: dict[str, dict[str, str]] = {
         "en": "Links to private or local network addresses are not allowed",
         "pl": "Linki do adresów prywatnych lub lokalnych nie są dozwolone",
     },
-    "fetch.resolve": {"en": "Cannot resolve host {host}", "pl": "Nie można znaleźć hosta {host}"},
+    "fetch.resolve": {"en": "Cannot resolve the host", "pl": "Nie można znaleźć hosta"},
     "fetch.http": {
         "en": "The server answered HTTP {status}",
         "pl": "Serwer odpowiedział HTTP {status}",

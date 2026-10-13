@@ -164,7 +164,7 @@ class BotService:
         if not raw_url or not raw_url.strip():
             raise UserError(tr(lang, "subscribe_usage"))
         try:
-            url = normalize_url(raw_url)
+            url = normalize_url(raw_url, any_port=self.settings.allow_private_urls)
         except FetchError as exc:
             raise UserError(exc.localized(lang)) from exc
         now = self.clock()

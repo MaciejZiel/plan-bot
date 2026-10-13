@@ -22,6 +22,8 @@ DEMO_URL = "demo"
 UPLOAD_URL = "upload"
 MAX_REDIRECTS = 5
 MAX_URL_LENGTH = 2048
+#: A timetable is served on a web port; this keeps the bot from probing other services.
+ALLOWED_PORTS = frozenset({80, 443, 8080, 8443})
 USER_AGENT = "plan-bot/0.2 (+https://github.com/MaciejZiel/plan-bot)"
 #: The bundled demo timetable is written for this Monday and is shifted by whole
 #: weeks after ``DEMO_VALID_UNTIL``, so a stranger always sees classes this week
@@ -52,7 +54,7 @@ class FetchError(Exception):
         return tr(lang, self.key, **self.params)
 
 
-def normalize_url(raw: str) -> str:
+def normalize_url(raw: str, *, any_port: bool = False) -> str:
     url = raw.strip().strip("<>")
     if url.lower() == DEMO_URL:
         return DEMO_URL
@@ -75,6 +77,8 @@ def normalize_url(raw: str) -> str:
         raise FetchError("url.credentials")
     if port == 0:
         raise FetchError("url.invalid")
+    if port is not None and port not in ALLOWED_PORTS and not any_port:
+        raise FetchError("url.port")
     return urlunsplit(parts)
 
 
@@ -134,7 +138,7 @@ async def ensure_public_host(host: str) -> None:
     try:
         infos = await loop.getaddrinfo(host, None, type=socket.SOCK_STREAM)
     except OSError as exc:
-        raise FetchError("fetch.resolve", host=host) from exc
+        raise FetchError("fetch.resolve") from exc
     for info in infos:
         address = ipaddress.ip_address(info[4][0])
         if not is_public_address(address):
@@ -166,7 +170,7 @@ class PublicOnlyResolver(AbstractResolver):
         try:
             infos = await self._inner.resolve(host, port, family)
         except OSError as exc:
-            raise PublicOnlyError("fetch.resolve", host=host) from exc
+            raise PublicOnlyError("fetch.resolve") from exc
         for info in infos:
             if not is_public_address(ipaddress.ip_address(info["host"])):
                 raise PublicOnlyError("fetch.private")
@@ -183,7 +187,7 @@ class Fetcher:
         self,
         *,
         max_bytes: int = 5_000_000,
-        timeout_seconds: float = 20,
+        timeout_seconds: float = 10,
         allow_private: bool = False,
         cache_seconds: float = 120,
         max_concurrency: int = 4,
@@ -197,6 +201,8 @@ class Fetcher:
         self._cache_bytes = 0
         self.max_concurrency = max_concurrency
         self._slots = asyncio.Semaphore(max_concurrency)
+        #: One download per host at a time, so one slow server cannot take every slot.
+        self._hosts: dict[str, asyncio.Semaphore] = {}
         self._session: aiohttp.ClientSession | None = None
 
     async def __aenter__(self) -> Fetcher:
@@ -225,11 +231,11 @@ class Fetcher:
     async def fetch(self, url: str) -> bytes:
         if url == DEMO_URL:
             return demo_calendar()
-        current = normalize_url(url)
+        current = normalize_url(url, any_port=self.allow_private)
         cached = self._cache.get(current)
         if cached is not None and time.monotonic() - cached[0] < self.cache_seconds:
             return cached[1]
-        async with self._slots:
+        async with self._host_slot(current), self._slots:
             try:
                 # One deadline for the whole download, redirects included, so a
                 # slow server cannot hold a slot for (redirects + 1) timeouts.
@@ -240,6 +246,14 @@ class Fetcher:
         if self.cache_seconds > 0:
             self._remember(current, data)
         return data
+
+    def _host_slot(self, url: str) -> asyncio.Semaphore:
+        host = (urlsplit(url).hostname or "").lower()
+        if len(self._hosts) >= 1024 and host not in self._hosts:
+            # Only idle semaphores can be dropped without letting a second download in.
+            for name in [n for n, sem in self._hosts.items() if not sem.locked()]:
+                del self._hosts[name]
+        return self._hosts.setdefault(host, asyncio.Semaphore(1))
 
     def _remember(self, url: str, data: bytes) -> None:
         """Cache ``data``, dropping expired and then oldest entries to stay within budget."""
@@ -272,7 +286,7 @@ class Fetcher:
                         location = response.headers.get("Location")
                         if not location:
                             raise FetchError("fetch.redirect")
-                        current = normalize_url(urljoin(current, location))
+                        current = normalize_url(urljoin(current, location), any_port=self.allow_private)
                         continue
                     if response.status != 200:
                         raise FetchError("fetch.http", status=response.status)

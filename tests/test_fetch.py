@@ -129,7 +129,7 @@ async def test_connection_error(fetcher: Fetcher) -> None:
 async def test_private_hosts_are_blocked_by_default(server: TestServer) -> None:
     async with Fetcher() as strict:
         with pytest.raises(FetchError, match="private or local"):
-            await strict.fetch(str(server.make_url("/feed.ics")))
+            await strict._download(str(server.make_url("/feed.ics")))
         assert await strict.fetch(DEMO_URL) == demo_calendar()
 
 
@@ -144,7 +144,7 @@ async def test_ensure_public_host(monkeypatch: pytest.MonkeyPatch) -> None:
         raise socket.gaierror("no such host")
 
     monkeypatch.setattr(asyncio.get_running_loop(), "getaddrinfo", fail)
-    with pytest.raises(FetchError, match="Cannot resolve host"):
+    with pytest.raises(FetchError, match="Cannot resolve the host"):
         await ensure_public_host("nope.invalid")
 
 
@@ -284,9 +284,9 @@ async def test_every_redirect_hop_is_checked(
 
     monkeypatch.setattr(fetch_module, "is_public_address", loopback_is_public)
     async with Fetcher(timeout_seconds=2) as strict:
-        assert await strict.fetch(str(server.make_url("/feed.ics"))) == ICS
+        assert await strict._download(str(server.make_url("/feed.ics"))) == ICS
         with pytest.raises(FetchError) as caught:
-            await strict.fetch(str(server.make_url("/to-metadata")))
+            await strict._download(str(server.make_url("/to-metadata")))
         assert caught.value.key == "fetch.private"
 
 
@@ -326,3 +326,45 @@ def test_demo_has_classes_this_week_and_next_week_every_day() -> None:
         weeks = {(les.start.date() - monday).days // 7 for les in lessons if not les.cancelled}
         assert weeks == {0, 1}, day
         day += timedelta(days=3)
+
+
+@pytest.mark.parametrize("port", [80, 443, 8080, 8443])
+def test_normalize_accepts_web_ports(port: int) -> None:
+    assert normalize_url(f"https://uni.example:{port}/a.ics").endswith(f":{port}/a.ics")
+
+
+@pytest.mark.parametrize("port", [22, 25, 3306, 6379, 9200])
+def test_normalize_rejects_other_ports(port: int) -> None:
+    with pytest.raises(FetchError, match="port"):
+        normalize_url(f"https://uni.example:{port}/a.ics")
+    assert normalize_url(f"https://uni.example:{port}/a.ics", any_port=True)
+
+
+async def test_one_download_per_host_at_a_time() -> None:
+    active = peak = 0
+
+    async def slow(request: web.Request) -> web.Response:
+        nonlocal active, peak
+        active += 1
+        peak = max(peak, active)
+        await asyncio.sleep(0.05)
+        active -= 1
+        return web.Response(body=ICS)
+
+    app = web.Application()
+    app.router.add_get("/a", slow)
+    app.router.add_get("/b", slow)
+    async with TestServer(app) as srv, Fetcher(allow_private=True, cache_seconds=0) as f:
+        await asyncio.gather(f.fetch(str(srv.make_url("/a"))), f.fetch(str(srv.make_url("/b"))))
+    assert peak == 1
+
+
+async def test_resolve_errors_do_not_leak_the_host() -> None:
+    async def failing(host: str, port: int = 0, family: int = 0) -> list[dict[str, Any]]:
+        raise OSError("nope")
+
+    resolver = fetch_module.PublicOnlyResolver()
+    resolver._inner.resolve = failing  # type: ignore[method-assign]
+    with pytest.raises(fetch_module.PublicOnlyError) as info:
+        await resolver.resolve("secret-host.example", 80)
+    assert "secret-host" not in str(info.value.error)
