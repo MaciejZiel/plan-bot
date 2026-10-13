@@ -1,0 +1,48 @@
+<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>plan-bot demo mock-up</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#313338;color:#dbdee1;font:15px/1.4 "Segoe UI",system-ui,sans-serif}
+.wrap{max-width:720px;margin:0 auto;padding:12px 16px 20px}
+.banner{background:#4a3f12;color:#f0d88a;font-size:12px;text-align:center;padding:6px 8px;border-radius:6px;margin-bottom:14px}
+.row{display:flex;gap:12px;margin:14px 0}
+.av{flex:none;width:40px;height:40px;border-radius:50%;display:grid;place-items:center;font-weight:700;color:#fff}
+.me{background:#5865f2}.bot{background:#3ba55d}
+.body{min-width:0;flex:1}
+.who{font-weight:600;color:#fff}.who small{font-weight:400;color:#949ba4;font-size:12px;margin-left:6px}
+.cmd{color:#c9cdfb;background:#3c3f5a;border-radius:4px;padding:0 4px}
+.embed{margin-top:4px;background:#2b2d31;border-left:4px solid #5865f2;border-radius:4px;padding:10px 14px;max-width:460px}
+.embed h4{margin:0 0 4px;font-size:15px;color:#fff}
+.embed p{margin:2px 0}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:2px 12px;margin-top:6px}
+.grid b{font-size:12px;color:#fff}
+.foot{margin-top:8px;font-size:12px;color:#949ba4}
+.btns{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.btns span{background:#4e5058;color:#fff;border-radius:4px;padding:4px 10px;font-size:13px}
+.eph{font-size:12px;color:#949ba4;margin-top:6px}
+</style>
+<div class="wrap">
+<div class="banner">DEMO MOCK-UP · text from real bot output · fictional timetable, no real user data</div>
+
+<div class="row"><div class="av me">Y</div><div class="body"><div class="who">you</div><span class="cmd">/demo</span></div></div>
+<div class="row"><div class="av bot">P</div><div class="body"><div class="who">plan-bot<small>BOT</small></div>
+<div class="embed"><h4>Timetable saved (bundled fictional demo timetable).</h4>
+<p>164 upcoming classes found.</p>
+<p>Groups in this timetable: C1, C2, EN-B2, L1, L2</p>
+<p>Reminders are on, 15 min before each class.</p>
+<div class="btns"><span>Next class</span><span>Today</span><span>Tomorrow</span><span>Week</span><span>Remind 15 min</span></div></div>
+<div class="eph">Only you can see this</div></div></div>
+
+<div class="row"><div class="av me">Y</div><div class="body"><div class="who">you</div><span class="cmd">/next</span></div></div>
+<div class="row"><div class="av bot">P</div><div class="body"><div class="who">plan-bot<small>BOT</small></div>
+<div class="embed"><h4>Next class: Algorithms and Data Structures (lecture)</h4>
+<p>Mon 12 Oct, 08:30–10:00</p><p>starts in 45 minutes</p>
+<div class="grid"><b>Room</b><b>Teacher</b><span>A-101</span><span>Prof. Alan Placeholder (fictional)</span></div>
+<div class="foot">Times in Europe/Warsaw · /help for all commands</div>
+<div class="btns"><span>Next class</span><span>Today</span><span>Tomorrow</span><span>Week</span></div></div>
+<div class="eph">Only you can see this</div></div></div>
+
+<div class="row"><div class="av me">Y</div><div class="body"><div class="who">you</div><span class="cmd">/subscribe</span> file: <span class="cmd">plan.ics</span></div></div>
+<div class="row"><div class="av bot">P</div><div class="body"><div class="who">plan-bot<small>BOT</small></div>
+<div class="embed"><h4>Timetable saved (uploaded file).</h4></div>
+<div class="eph">Only you can see this</div></div></div>
+</div>

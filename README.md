@@ -1,14 +1,20 @@
 # plan-bot
 
+**Your university timetable, answered in the chat you already use.**
+
+**[Add the bot to Discord](https://discord.com/oauth2/authorize?client_id=1559599102084521994&scope=bot+applications.commands&permissions=84992)** · [Status](https://status.maciejzielinski.dev) · [Portfolio](https://maciejzielinski.dev)
+
+Try it now: run `/demo` for a fictional sample timetable, or `/subscribe` with an `.ics` file or a link to your own.
+
 [![CI](https://github.com/MaciejZiel/plan-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/MaciejZiel/plan-bot/actions/workflows/ci.yml)
 ![Python 3.12 | 3.14](https://img.shields.io/badge/python-3.12%20%7C%203.14-3776ab)
 ![Coverage 98%](https://img.shields.io/badge/coverage-98%25-brightgreen)
 ![Ruff + mypy strict](https://img.shields.io/badge/lint-ruff%20%2B%20mypy%20strict-informational)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-**Your university timetable, answered in the chat you already use.** plan-bot reads any timetable
-published as an iCalendar (ICS) link and gives students on **Discord** (slash commands, embeds,
-buttons, plain questions) and **Telegram**:
+plan-bot reads any timetable
+published as an iCalendar (ICS) link or exported as an `.ics` file and gives students on
+**Discord** (slash commands, embeds, buttons, plain questions) and **Telegram**:
 
 - **English and Polish**: the language follows your Discord or Telegram app on first contact,
   `/lang en|pl` overrides it
@@ -120,12 +126,19 @@ bot > Could not download the timetable: Links to private or local network addres
 
 ## Screenshots
 
-The image below is a **demo mock-up**. The message texts are real bot output for the fictional
-sample timetable, rendered into a static HTML chat frame by
-[`scripts/render_demo_chats.py`](scripts/render_demo_chats.py) and captured with Playwright. It is
-not a screenshot of the real Telegram app.
+The images below are a **demo mock-up**, not a screenshot of a real Discord server or of anyone's
+plan. The message texts are real bot output for the fictional sample timetable (`/demo`, `/next`),
+laid out in a static HTML chat frame ([`docs/screenshots/discord-demo.html`](docs/screenshots/discord-demo.html))
+and captured with Playwright at a desktop and a mobile width.
 
-<img src="docs/screenshots/telegram.png" alt="Demo mock-up of a Telegram chat with plan-bot" width="380">
+<img src="docs/screenshots/discord-demo.png" alt="Demo mock-up of Discord replies from plan-bot to /demo and /next on a fictional timetable, desktop width" width="460">
+<img src="docs/screenshots/discord-demo-mobile.png" alt="The same mock-up at mobile width" width="220">
+
+## Self-hosted
+
+The public bot runs on a home server, not on a cloud platform. Its uptime is on the
+[status page](https://status.maciejzielinski.dev). You can run your own copy; see
+[Quick start](#quick-start) and [Self-hosting on Termux](#self-hosting-on-termux).
 
 ## Architecture
 
@@ -538,8 +551,8 @@ They cover:
   for reminders to arrive.
 - Free-text understanding is a keyword table for Polish and English, not a language model: it
   handles the common phrasings and a typo, and falls back to a help message otherwise.
-- The Discord adapter has been tested against fakes of the discord.py objects, not yet against the
-  live Discord API.
+- The Discord adapter is unit-tested against fakes of the discord.py objects; the public
+  deployment is what exercises it against the live Discord API.
 - All-day events are ignored, because they are usually holidays rather than classes.
 - Group filtering relies on `CATEGORIES` or group names appearing in the title or description.
   Feeds that encode groups some other way may need `/filter off`.
