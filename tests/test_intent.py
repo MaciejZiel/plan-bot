@@ -63,6 +63,20 @@ CASES: list[tuple[str, str, str | None, str | None]] = [
     ("forget me", "forget", None, None),
     ("status", "status", None, None),
     ("ustawienia", "status", None, None),
+    # added after a review against unseen phrasings
+    ("co dalej", "next", None, None),
+    ("co mam po tym", "next", None, "pl"),
+    ("przypomnij mi pol godziny przed", "remind", "30", "pl"),
+    ("przypomnienie 1h przed", "remind", "60", "pl"),
+    ("remind me 15min before", "remind", "15", "en"),
+    ("remind me half an hour before", "remind", "30", "en"),
+    ("no more reminders", "remind", "off", "en"),
+    ("co mam za tydzien", "week", "next", "pl"),
+    ("upcoming week", "week", "next", "en"),
+    ("co potrafisz", "help", None, None),
+    ("jak tego uzywac", "help", None, None),
+    ("jak to działa", "help", None, "pl"),
+    ("how do i use this", "help", None, None),
 ]
 
 

@@ -36,7 +36,8 @@ def normalize(text: str) -> list[str]:
     folded = text.lower().translate(_FOLD)
     decomposed = unicodedata.normalize("NFKD", folded)
     plain = "".join(ch for ch in decomposed if not unicodedata.combining(ch))
-    return re.findall(r"[a-z0-9]+", plain)[:MAX_WORDS]
+    # Digits and letters are separate words, so "1h" and "30min" read as "1 h", "30 min".
+    return re.findall(r"[a-z]+|[0-9]+", plain)[:MAX_WORDS]
 
 
 def _distance_at_most_one(a: str, b: str) -> bool:
@@ -84,13 +85,19 @@ def _exact(tokens: list[str], *words: str) -> bool:
 
 
 def _minutes(tokens: list[str]) -> int | None:
-    """``30`` or ``30 min`` -> 30; ``2 h`` / ``2 godz`` -> 120."""
+    """``30`` or ``30 min`` -> 30; ``2 h`` / ``2 godz`` -> 120; "pół godziny" -> 30."""
     for index, token in enumerate(tokens):
         if not token.isdigit():
             continue
         value = int(token)
         unit = tokens[index + 1] if index + 1 < len(tokens) else ""
         return value * 60 if unit.startswith(("h", "godz")) else value
+    if _exact(tokens, "pol", "half"):
+        return 30
+    if _has(tokens, "kwadrans", "quarter"):
+        return 15
+    if _has(tokens, "godzin", "hour"):
+        return 60
     return None
 
 
@@ -126,7 +133,9 @@ def match(text: str) -> Intent | None:
 
     if _has(tokens, "przypomn", "remind", "powiadom", "notify", "alert"):
         minutes = _minutes(tokens)
-        off = _has(tokens, "wylacz", "bez", "nie", "stop", "off", "cancel", "disable")
+        off = _has(tokens, "wylacz", "bez", "nie", "stop", "off", "cancel", "disable") or (
+            _exact(tokens, "no") and _exact(tokens, "more")
+        )
         if off and minutes is None:
             return Intent("remind", "off", lang)
         if minutes is not None and 1 <= minutes <= 24 * 60:
@@ -149,7 +158,9 @@ def match(text: str) -> Intent | None:
         return Intent("demo", None, lang)
 
     if _has(tokens, "tydzie", "tygod", "tydz", "week", "weekly"):
-        later = _has(tokens, "przyszl", "nastepn", "kolejn", "next", "following", "coming")
+        later = _has(
+            tokens, "przyszl", "nastepn", "kolejn", "next", "following", "coming", "upcoming"
+        ) or _exact(tokens, "za")
         return Intent("week", "next" if later else None, lang)
 
     if _has(tokens, "jutr", "jutro", "tomorrow", "tommorow", "tmrw"):
@@ -167,10 +178,17 @@ def match(text: str) -> Intent | None:
         _has(
             tokens, "help", "pomoc", "pomog", "komend", "command", "hej", "czesc", "siema", "witaj"
         )
-        or _exact(tokens, "start", "hi", "hello", "hey", "umiesz")
+        or _has(tokens, "potrafi", "umiesz", "uzywa", "obslug", "instrukc")
+        or _exact(tokens, "start", "hi", "hello", "hey")
         or (_has(tokens, "what") and _has(tokens, "can") and _exact(tokens, "do"))
+        or (_exact(tokens, "how") and _exact(tokens, "use", "work", "works"))
+        or (_exact(tokens, "jak") and _has(tokens, "dziala"))
     ):
         return Intent("help", None, lang)
+
+    # "co dalej?", "co mam po tym?"
+    if _exact(tokens, "dalej") or (_exact(tokens, "po") and _exact(tokens, "tym")):
+        return Intent("next", None, lang)
 
     classes = _has(
         tokens, "zajec", "zajeci", "lekcj", "wyklad", "cwiczen", "class", "lectur", "lesson"
