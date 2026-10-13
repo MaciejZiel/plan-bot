@@ -551,8 +551,8 @@ They cover:
   for reminders to arrive.
 - Free-text understanding is a keyword table for Polish and English, not a language model: it
   handles the common phrasings and a typo, and falls back to a help message otherwise.
-- The Discord adapter has been tested against fakes of the discord.py objects, not yet against the
-  live Discord API.
+- The Discord adapter is unit-tested against fakes of the discord.py objects; the public
+  deployment is what exercises it against the live Discord API.
 - All-day events are ignored, because they are usually holidays rather than classes.
 - Group filtering relies on `CATEGORIES` or group names appearing in the title or description.
   Feeds that encode groups some other way may need `/filter off`.
