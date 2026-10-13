@@ -74,7 +74,13 @@ async def run_bots(
             notifier.register(telegram)
             runners.append(telegram.run(stop))
         if settings.discord_token:
-            from plan_bot.adapters.discord import DiscordAdapter
+            try:
+                from plan_bot.adapters.discord import DiscordAdapter
+            except ImportError as exc:
+                raise RuntimeError(
+                    "DISCORD_BOT_TOKEN is set but discord.py is not installed "
+                    "(install it with `pip install 'plan-bot[discord]'`)."
+                ) from exc
 
             discord_bot = DiscordAdapter(
                 app.router, settings.discord_token, guild_id=settings.discord_guild_id

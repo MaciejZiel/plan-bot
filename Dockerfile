@@ -7,9 +7,9 @@ ENV UV_COMPILE_BYTECODE=1 \
     UV_PYTHON_DOWNLOADS=never
 WORKDIR /app
 COPY pyproject.toml uv.lock README.md LICENSE ./
-RUN uv sync --locked --no-dev --extra postgres --no-install-project
+RUN uv sync --locked --no-dev --extra postgres --extra discord --no-install-project
 COPY src ./src
-RUN uv sync --locked --no-dev --extra postgres --no-editable
+RUN uv sync --locked --no-dev --extra postgres --extra discord --no-editable
 
 FROM python:3.12-slim
 RUN useradd --create-home --uid 10001 planbot \
