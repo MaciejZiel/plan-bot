@@ -20,7 +20,7 @@
   <img alt="Ruff and mypy strict" src="https://img.shields.io/badge/lint-ruff%20%2B%20mypy%20strict-informational">
 </p>
 
-<p align="center">Try it now: run `/demo` for a fictional sample timetable, or `/subscribe` with an `.ics` file or a link to your own.</p>
+<p align="center">Try it now: run <code>/demo</code> for a fictional sample timetable, or <code>/subscribe</code> with an <code>.ics</code> file or a link to your own.</p>
 
 ## ✨ Features
 
