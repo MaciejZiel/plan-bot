@@ -16,7 +16,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   timetable was read with. After this upgrade the first refresh of each link subscription replaces
   the snapshot without a change alert, so shifted times are not announced as changes. A file that
   was uploaded is not stored, so it cannot be re-read: upload it again (the reply then skips the
-  change list once).
+  change list once). Bumping `PARSER_VERSION` suppresses change alerts for one refresh by design,
+  so a genuine change arriving in that refresh is not announced.
+- A chat whose uploaded file was read with an older parser is told once, at the next scheduler
+  tick, to upload it again (English or Polish), and `/today`, `/tomorrow`, `/week` and `/next`
+  end with a warning line until it does. Schema change (migration `0004`) remembers that the
+  notice was sent.
+- Manual `/refresh` on a snapshot read with an older parser says the timetable was re-read with
+  corrected times instead of "no changes".
+- Migration downgrades (`0003` to `0002`, `0002` to `0001`) no longer empty `lessons` and
+  `sent_reminders`: with SQLite foreign keys on, Alembic's table copy cascaded. The column is now
+  dropped in place.
 
 ### Added
 - `/subscribe` accepts an `.ics` file attachment (`file` option) for universities that only offer a

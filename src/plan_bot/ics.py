@@ -40,7 +40,9 @@ SUB_DAILY = frozenset({"HOURLY", "MINUTELY", "SECONDLY"})
 DEFAULT_DURATION = timedelta(minutes=90)
 #: Bumped whenever the same feed can parse to different lessons than before. Stored per
 #: subscription, so the first refresh after an upgrade can replace the snapshot silently
-#: instead of announcing every shifted class as a change.
+#: instead of announcing every shifted class as a change. The price: a genuine timetable
+#: change that lands in that same refresh is not announced either. An uploaded file cannot be
+#: re-read, so its chat is told once to upload it again and sees a warning until it does.
 #: 1: a ``Z`` time is UTC again (version 0 read it as local time for the PJATK export).
 PARSER_VERSION = 1
 #: ``Subject s. W21``: some exports append the room to the title and leave LOCATION empty.
