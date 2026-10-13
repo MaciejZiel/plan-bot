@@ -7,6 +7,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ## [Unreleased]
 
 ### Added
+- `/subscribe` accepts an `.ics` file attachment (`file` option) for universities that only offer a
+  download. The parsed timetable is stored for that chat only, answers are ephemeral and
+  `/forget` deletes it. Uploads obey the download size limit, are never refreshed automatically,
+  show as `uploaded file, <date>` in `/status`, and re-uploading replaces the file and reports
+  what changed. No schema change.
+- The PJATK export is read correctly: its UTC-labelled times are taken as Warsaw wall-clock time
+  (only when `PRODID` contains `PJWSTK PLAN`) and a trailing ` s. <room>` in the title becomes the
+  location when the event has none.
+- `/groups` and `/filter` say that filtering is pointless when a timetable has a single group tag.
 - Discord is first-class: localised slash commands (`pl`, `en-US`, `en-GB`) including
   `/remind set|list|off`, embeds with room, teacher and a live countdown, buttons that mirror the
   Telegram keyboard, ephemeral answers outside the user's DM with the bot and a private form for

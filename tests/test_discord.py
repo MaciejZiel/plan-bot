@@ -484,7 +484,7 @@ async def test_bad_attachments_get_a_private_explanation(
 
 async def test_the_router_receives_the_attachment_and_locale(service: BotService) -> None:
     fake = FakeRouter()
-    bot = DiscordAdapter(fake, "not-a-real-token")  # type: ignore[arg-type]
+    bot = DiscordAdapter(fake, "not-a-real-token")
     await slash(bot, "subscribe", None, FakeAttachment(b"BEGIN"), locale="pl")
     assert fake.calls == [(user_chat(USER), "upload", "plan.ics", "pl")]
     assert fake.uploaded == b"BEGIN"
