@@ -46,7 +46,7 @@ jobs:
         run: docker build -t plan-bot:ci .
       - name: Smoke test
         run: |
-          printf '/setfeed demo\n/next\n' \
+          printf '/demo\n/next\n' \
             | docker run --rm -i plan-bot:ci console --at 2026-10-12T08:00 \
             | tee out.txt
           grep -q "Next: Algorithms and Data Structures" out.txt
