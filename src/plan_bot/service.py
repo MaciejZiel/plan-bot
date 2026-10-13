@@ -314,6 +314,8 @@ class BotService:
                     await self._notify(
                         sub, tr(sub.language, "refresh_failing", count=count, error=exc)
                     )
+            except Exception:  # one broken feed or chat must not stop the others
+                log.exception("feed refresh crashed", extra={"chat": _chat_tag(sub)})
         return refreshed
 
     async def refresh_subscription(
@@ -323,6 +325,8 @@ class BotService:
         old = await self.repo.lessons(sub.id)
         new = await self._download(sub.ics_url, now, sub.language)
         window_end = await self._store(sub, new, now)
+        if window_end is None:  # forgotten or switched to another feed meanwhile
+            return []
         until = min(
             window_end,
             sub.window_end or window_end,
@@ -365,9 +369,10 @@ class BotService:
             lessons = await self.repo.lessons(sub.id)
             days = week_of(lessons, monday, self.tz, self._filter(sub))
             title = tr(sub.language, "title.coming_week")
-            await self._notify(sub, format_week(days, self.tz, title=title, lang=sub.language))
-            await self.repo.update(ChatRef(sub.platform, sub.chat_id), last_weekly_key=key)
-            sent += 1
+            text = format_week(days, self.tz, title=title, lang=sub.language)
+            if await self._notify(sub, text):
+                await self.repo.update(ChatRef(sub.platform, sub.chat_id), last_weekly_key=key)
+                sent += 1
         return sent
 
     async def prune(self, now: datetime) -> int:
@@ -396,10 +401,15 @@ class BotService:
         except IcsError as exc:
             raise UserError(tr(lang, "not_ics", error=exc)) from exc
 
-    async def _store(self, sub: Subscription, lessons: list[Lesson], now: datetime) -> datetime:
+    async def _store(
+        self, sub: Subscription, lessons: list[Lesson], now: datetime
+    ) -> datetime | None:
+        """Save the snapshot; ``None`` if the chat changed its feed or was deleted meanwhile."""
         window = self._window(now)
-        await self.repo.replace_lessons(sub.id, lessons, refreshed_at=now, window_end=window.end)
-        return window.end
+        stored = await self.repo.replace_lessons(
+            sub.id, lessons, refreshed_at=now, window_end=window.end, feed_url=sub.ics_url
+        )
+        return window.end if stored else None
 
     async def _load(self, chat: ChatRef) -> tuple[Subscription, list[Lesson]]:
         sub = await self.repo.get(chat)
@@ -412,7 +422,8 @@ class BotService:
     def _filter(sub: Subscription) -> GroupFilter:
         return GroupFilter.parse(sub.group_filter)
 
-    async def _notify(self, sub: Subscription, text: str) -> None:
+    async def _notify(self, sub: Subscription, text: str) -> bool:
+        """Send ``text``; ``False`` if the chat is gone (and its data was deleted)."""
         chat = ChatRef(sub.platform, sub.chat_id)
         try:
             await self.notifier.send(chat, text)
@@ -420,8 +431,10 @@ class BotService:
             # The user blocked the bot or left: stop working for nobody and drop their data.
             log.info("chat unavailable, deleting its data", extra={"chat": _chat_tag(sub)})
             await self.repo.delete(chat)
+            return False
         except Exception:  # one broken chat must not stop the job for everybody
             log.exception("failed to deliver a message", extra={"chat": _chat_tag(sub)})
+        return True
 
 
 def _chat_tag(sub: Subscription) -> str:

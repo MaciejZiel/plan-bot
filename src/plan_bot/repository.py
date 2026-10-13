@@ -132,19 +132,27 @@ class Repository:
         *,
         refreshed_at: datetime,
         window_end: datetime,
-    ) -> None:
+        feed_url: str | None = None,
+    ) -> bool:
+        """Store a new snapshot; ``False`` (and nothing stored) if it is out of date.
+
+        That is the case when the chat was deleted meanwhile or, with ``feed_url``,
+        when it switched to another feed while this one was being downloaded.
+        """
         async with self._sessions() as session:
+            sub = await session.get(Subscription, subscription_id)
+            if sub is None or (feed_url is not None and sub.ics_url != feed_url):
+                return False
             await session.execute(
                 delete(LessonRow).where(LessonRow.subscription_id == subscription_id)
             )
             session.add_all(_to_row(subscription_id, les) for les in lessons)
-            sub = await session.get(Subscription, subscription_id)
-            if sub is not None:
-                sub.last_refresh_at = refreshed_at
-                sub.window_end = window_end
-                sub.last_error = None
-                sub.error_count = 0
+            sub.last_refresh_at = refreshed_at
+            sub.window_end = window_end
+            sub.last_error = None
+            sub.error_count = 0
             await session.commit()
+            return True
 
     async def record_error(self, subscription_id: int, message: str, at: datetime) -> int:
         async with self._sessions() as session:

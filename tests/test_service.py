@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import timedelta
 
 import pytest
@@ -295,3 +296,74 @@ async def test_feed_errors_are_localized(service: BotService, feeds: FakeFeeds) 
     await service.set_language(CHAT, "pl")
     with pytest.raises(UserError, match="Serwer odpowiedział HTTP 404"):
         await service.set_feed(CHAT, "https://missing.example.org/a.ics")
+
+
+async def test_weekly_summary_to_a_blocked_chat_does_not_recreate_it(
+    service: BotService, repo: Repository
+) -> None:
+    await service.set_feed(CHAT, "demo")
+
+    async def gone(chat: ChatRef, text: str) -> None:
+        raise ChatUnavailable("bot was blocked")
+
+    service.notifier.send = gone  # type: ignore[method-assign]
+    assert await service.send_weekly_summaries(warsaw(2026, 10, 18, 18, 5)) == 0
+    assert await repo.get(CHAT) is None
+
+
+class GatedFeeds(FakeFeeds):
+    """Holds downloads of one URL until ``gate`` is set."""
+
+    def __init__(self, held: str, **payloads: bytes | Exception) -> None:
+        super().__init__(**payloads)
+        self.held = held
+        self.gate = asyncio.Event()
+        self.waiting = asyncio.Event()
+        self.hold = False
+
+    async def fetch(self, url: str) -> bytes:
+        if self.hold and url == self.held:
+            self.waiting.set()
+            await self.gate.wait()
+        return await super().fetch(url)
+
+
+async def test_refresh_survives_chats_forgetting_or_switching_feeds_meanwhile(
+    repo: Repository, settings: Settings, clock: FakeClock, notifier: RecordingNotifier
+) -> None:
+    other_url = "https://other.example.org/feed.ics"
+    new_url = "https://new.example.org/feed.ics"
+    feeds = GatedFeeds(
+        URL,
+        **{
+            URL: fixture_bytes("edits_before.ics"),
+            other_url: fixture_bytes("edits_before.ics"),
+            new_url: fixture_bytes("sample.ics"),
+        },
+    )
+    service = BotService(repo, feeds, settings, clock=clock, notifier=notifier)
+    third = ChatRef("telegram", "300")
+    await service.set_feed(CHAT, URL)
+    await service.set_feed(third, URL)
+    await service.set_feed(OTHER, other_url)
+    clock.now += timedelta(hours=1)
+    feeds.hold = True
+    job = asyncio.create_task(service.refresh_due(clock.now))
+    await asyncio.wait_for(feeds.waiting.wait(), timeout=5)
+    # While CHAT's old feed is being downloaded: CHAT leaves, the third chat switches feeds.
+    gone = await repo.get(CHAT)
+    assert gone is not None
+    await service.forget(CHAT)
+    feeds.hold = False
+    await service.set_feed(third, new_url)
+    switched = await repo.get(third)
+    assert switched is not None
+    expected = await repo.lessons(switched.id)
+    feeds.gate.set()
+    assert await asyncio.wait_for(job, timeout=5) == 3
+    assert await repo.get(CHAT) is None
+    assert await repo.lessons(gone.id) == []  # nothing stored for the forgotten chat
+    assert await repo.lessons(switched.id) == expected  # the new feed was not overwritten
+    other = await repo.get(OTHER)
+    assert other is not None
+    assert other.last_refresh_at == clock.now
