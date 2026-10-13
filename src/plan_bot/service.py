@@ -7,6 +7,7 @@ deliver the returned text; background jobs push messages through a
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 from collections.abc import Callable
@@ -99,6 +100,9 @@ class BotService:
         self.tz = settings.timezone
         self.clock = clock
         self.notifier: Notifier = notifier or NullNotifier()
+        # Expanding a feed is CPU-bound: do it in a worker thread so the event loop
+        # keeps answering other chats, and one at a time so feeds cannot pile up.
+        self._expanding = asyncio.Lock()
 
     # ----------------------------------------------------------------- language
 
@@ -385,7 +389,8 @@ class BotService:
                 data = demo_calendar(now.astimezone(self.tz).date())
             else:
                 data = await self.fetcher.fetch(url)
-            return expand(data, self._window(now), self.tz)
+            async with self._expanding:
+                return await asyncio.to_thread(expand, data, self._window(now), self.tz)
         except FetchError as exc:
             raise UserError(tr(lang, "download_failed", error=exc.localized(lang))) from exc
         except IcsError as exc:
