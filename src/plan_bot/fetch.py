@@ -21,9 +21,11 @@ MAX_REDIRECTS = 5
 MAX_URL_LENGTH = 2048
 USER_AGENT = "plan-bot/0.2 (+https://github.com/MaciejZiel/plan-bot)"
 #: The bundled demo timetable is written for this Monday and is shifted by whole
-#: weeks once it has expired, so a stranger always sees classes this week.
+#: weeks after ``DEMO_VALID_UNTIL``, so a stranger always sees classes this week
+#: and next week. That is the last day before the Christmas break (no classes in
+#: the week of 28 Dec) would leave the current or the next week empty.
 DEMO_ANCHOR = date(2026, 10, 5)
-DEMO_VALID_UNTIL = date(2027, 1, 10)
+DEMO_VALID_UNTIL = date(2026, 12, 20)
 #: Upper bound on cached feed bytes, so many large feeds cannot exhaust memory.
 MAX_CACHE_BYTES = 32_000_000
 _NAT64 = ipaddress.ip_network("64:ff9b::/96")

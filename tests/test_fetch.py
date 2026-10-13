@@ -4,7 +4,7 @@ import asyncio
 import ipaddress
 import socket
 from collections.abc import AsyncIterator
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
 from typing import Any
 
 import pytest
@@ -230,7 +230,8 @@ async def test_cache_shares_downloads(server: TestServer) -> None:
 
 def test_demo_calendar_rolls_forward() -> None:
     assert demo_calendar(date(2026, 10, 13)) == demo_calendar()
-    assert demo_shift(date(2027, 1, 10)) == timedelta(0)
+    assert demo_shift(date(2026, 12, 20)) == timedelta(0)
+    assert demo_shift(date(2026, 12, 21)) == timedelta(weeks=7)
     moved = demo_calendar(date(2027, 6, 2))  # a Wednesday
     shift = demo_shift(date(2027, 6, 2))
     assert shift.days % 7 == 0
@@ -309,3 +310,19 @@ async def test_cache_stays_within_its_byte_budget(
         await f.fetch(second)
         assert list(f._cache) == [second]
         assert f._cache_bytes == len(ICS)
+
+
+def test_demo_has_classes_this_week_and_next_week_every_day() -> None:
+    from zoneinfo import ZoneInfo
+
+    from plan_bot.ics import Window, expand
+
+    tz = ZoneInfo("Europe/Warsaw")
+    day = date(2026, 10, 5)
+    while day < date(2028, 1, 1):
+        monday = day - timedelta(days=day.weekday())
+        start = datetime.combine(monday, time(0), tz)
+        lessons = expand(demo_calendar(day), Window(start, start + timedelta(days=14)), tz)
+        weeks = {(les.start.date() - monday).days // 7 for les in lessons if not les.cancelled}
+        assert weeks == {0, 1}, day
+        day += timedelta(days=3)

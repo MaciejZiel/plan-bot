@@ -11,8 +11,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   `/lang en|pl` to change).
 - `/start` onboarding, `/demo` and `/subscribe` (the old `/setfeed` keeps working), inline
   keyboards on Telegram, a per-language command menu.
-- The demo timetable rolls forward by whole weeks once the bundled semester has passed, so it
-  always has classes this week; it never raises change alerts.
+- The demo timetable rolls forward by whole weeks before the bundled semester reaches its
+  Christmas break, so it always has classes this week and next week; it never raises change
+  alerts.
 - Per-chat rate limiting, a shared feed cache and a download concurrency cap.
 - Structured JSON logging, token redaction, a `/healthz` endpoint and graceful shutdown.
 - `deploy/termux/` for self-hosting on Android; Python 3.14 support.
