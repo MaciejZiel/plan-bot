@@ -345,8 +345,8 @@ uv run pytest --cov               # fails under 85 % coverage
 uv run python scripts/render_demo_chats.py docs/screenshots   # regenerate the demo mock-ups
 ```
 
-The suite has **219 tests** with **98% line coverage** (CI fails below 85%) and runs in a few
-seconds. All tests use fictional fixtures (`tests/fixtures/*.ics` and the bundled sample).
+The suite has **220 tests** with **98% line coverage** (CI fails below 85%) and runs in about
+ten seconds. All tests use fictional fixtures (`tests/fixtures/*.ics` and the bundled sample).
 They cover:
 
 - weekly, interval and daily rules, `EXDATE` (also written in UTC) and `RDATE`-only series
