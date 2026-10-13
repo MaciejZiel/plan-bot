@@ -235,7 +235,7 @@ class BotService:
         upcoming = [les for les in lessons if les.start >= now and not les.cancelled]
         groups = group_names(lessons)
         lines = [saved, tr(lang, "upcoming", n=len(upcoming))]
-        if groups:
+        if len(groups) > 1:  # a single tag cannot tell anyone's classes apart
             lines.append(tr(lang, "groups_found", groups=", ".join(groups)))
             lines.append(tr(lang, "filter_hint", example=",".join(groups[:2])))
         if sub.reminder_minutes:
@@ -294,9 +294,15 @@ class BotService:
         lang = sub.language
         names = group_names(lessons)
         current = self._filter(sub)
-        lines = [
-            tr(lang, "groups_list", groups=", ".join(names)) if names else tr(lang, "groups_none")
-        ]
+        if len(names) == 1:
+            first = tr(lang, "groups_single", group=names[0])
+        else:
+            first = (
+                tr(lang, "groups_list", groups=", ".join(names))
+                if names
+                else tr(lang, "groups_none")
+            )
+        lines = [first]
         lines.append(
             tr(lang, "filter_current", f=sub.group_filter) if current else tr(lang, "filter_none")
         )
@@ -313,10 +319,13 @@ class BotService:
         cleaned = GroupFilter.clean(value)
         parsed = GroupFilter.parse(cleaned)
         sub = await self.repo.update(chat, group_filter=cleaned)
-        known = {g.casefold() for g in group_names(await self.repo.lessons(sub.id))}
+        names = group_names(await self.repo.lessons(sub.id))
+        known = {g.casefold() for g in names}
         unknown = sorted(parsed.tokens - known)
         reply = tr(lang, "filter_set", f=cleaned)
-        if known and unknown:
+        if len(known) == 1:
+            reply += "\n" + tr(lang, "groups_single", group=names[0])
+        elif known and unknown:
             reply += "\n" + tr(lang, "filter_unknown", x=", ".join(unknown))
         return reply
 

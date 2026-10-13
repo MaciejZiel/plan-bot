@@ -214,6 +214,10 @@ _M: dict[str, dict[str, str]] = {
     },
     "week_usage": {"en": "Use /week or /week next", "pl": "Użyj /week albo /week next"},
     "groups_list": {"en": "Groups: {groups}", "pl": "Grupy: {groups}"},
+    "groups_single": {
+        "en": "This timetable has only one group tag ({group}), so filtering will not help.",
+        "pl": "Ten plan ma tylko jedno oznaczenie grupy ({group}), więc filtr nic nie da.",
+    },
     "groups_none": {
         "en": "This timetable has no group tags.",
         "pl": "Ten plan nie ma oznaczeń grup.",
