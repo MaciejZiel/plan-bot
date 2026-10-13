@@ -120,3 +120,44 @@ def test_expansion_has_a_time_budget() -> None:
     data = _calendar("FREQ=WEEKLY;BYMONTH=2;BYMONTHDAY=31", "20260105T080000", events=5)
     with pytest.raises(FeedTooComplex, match="too complex"):
         expand(data, HOSTILE_WINDOW, WARSAW, seconds=0.1)
+
+
+# ------------------------------------------------- exporters that mislabel local times
+
+WALLCLOCK = expand(
+    fixture_bytes("wallclock_export.ics"), Window(warsaw(2026, 1, 1), warsaw(2028, 1, 1)), WARSAW
+)
+
+
+def test_utc_labelled_times_from_the_pjatk_export_are_local_wall_clock() -> None:
+    before, after, _ = WALLCLOCK
+    # Both sides of the 25 Oct 2026 change back to winter time keep 10:15 on the wall.
+    assert (before.start, before.end) == (warsaw(2026, 10, 22, 10, 15), warsaw(2026, 10, 22, 12))
+    assert (after.start, after.end) == (warsaw(2026, 10, 27, 10, 15), warsaw(2026, 10, 27, 12))
+    assert before.start.utcoffset() == timedelta(hours=2)
+    assert after.start.utcoffset() == timedelta(hours=1)
+
+
+def test_other_exporters_keep_their_utc_times() -> None:
+    data = fixture_bytes("wallclock_export.ics").replace(b"PJWSTK PLAN", b"SOMEONE ELSE")
+    first = expand(data, Window(warsaw(2026, 1, 1), warsaw(2028, 1, 1)), WARSAW)[0]
+    assert first.start == datetime(2026, 10, 22, 10, 15, tzinfo=UTC)
+    assert first.start.astimezone(WARSAW).hour == 12
+
+
+def test_a_trailing_room_moves_from_the_title_to_the_location() -> None:
+    first, second, third = WALLCLOCK
+    assert (first.summary, first.location) == ("Imaginary Algebra lecture", "W21")
+    assert (second.summary, second.location) == ("Imaginary Algebra exercises", "B/03")
+    # An explicit LOCATION wins and the title is left alone.
+    assert (third.summary, third.location) == ("Fictional Physics s. B212", "Aula Magna")
+
+
+@pytest.mark.parametrize("title", ["Seminar", "Class s. 5 and more", "Physics s.", "s. W21"])
+def test_titles_without_a_trailing_room_are_untouched(title: str) -> None:
+    data = (
+        "BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:t\nDTSTART:20261022T101500\n"
+        f"SUMMARY:{title}\nEND:VEVENT\nEND:VCALENDAR\n"
+    ).encode()
+    (lesson,) = expand(data, Window(warsaw(2026, 1, 1), warsaw(2028, 1, 1)), WARSAW)
+    assert (lesson.summary, lesson.location) == (title, "")
