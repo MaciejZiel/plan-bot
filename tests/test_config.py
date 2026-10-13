@@ -73,6 +73,9 @@ def test_serving_and_logging_settings() -> None:
     assert settings.rate_burst == 3
     assert Settings.from_env({"PLAN_BOT_BASE_PATH": "/"}).base_path == ""
     assert Settings.from_env({}).health_port == 0  # disabled unless asked for
+    assert Settings.from_env({}).telegram_api_url == "https://api.telegram.org"
+    local = Settings.from_env({"TELEGRAM_API_URL": "http://127.0.0.1:8081"})
+    assert local.telegram_api_url == "http://127.0.0.1:8081"
 
 
 @pytest.mark.parametrize(

@@ -70,7 +70,10 @@ async def run_bots(
         if settings.telegram_token:
             from plan_bot.adapters.telegram import TelegramAdapter, TelegramApi
 
-            telegram = TelegramAdapter(TelegramApi(settings.telegram_token, http), app.router)
+            telegram = TelegramAdapter(
+                TelegramApi(settings.telegram_token, http, base_url=settings.telegram_api_url),
+                app.router,
+            )
             notifier.register(telegram)
             runners.append(lambda: telegram.run(stop))
         if settings.discord_token:
