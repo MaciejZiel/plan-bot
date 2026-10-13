@@ -135,7 +135,8 @@ class TelegramAdapter:
         self.username: str | None = None
         # A slow feed must not block everybody else, but one chat's commands stay ordered.
         self._slots = asyncio.Semaphore(max_concurrency)
-        self._chat_locks: dict[str, asyncio.Lock] = {}
+        #: chat id -> (lock, number of updates holding or waiting for it)
+        self._chat_locks: dict[str, tuple[asyncio.Lock, int]] = {}
         self._tasks: set[asyncio.Task[None]] = set()
 
     async def send(self, chat: ChatRef, text: str, reply: Reply | None = None) -> None:
@@ -213,17 +214,21 @@ class TelegramAdapter:
     async def _guarded(self, update: dict[str, Any]) -> None:
         container = update.get("message") or (update.get("callback_query") or {}).get("message")
         chat_id = str(((container or {}).get("chat") or {}).get("id"))
-        lock = self._chat_locks.setdefault(chat_id, asyncio.Lock())
+        lock, users = self._chat_locks.get(chat_id, (asyncio.Lock(), 0))
+        self._chat_locks[chat_id] = (lock, users + 1)
         try:
-            async with self._slots, lock:
+            # The chat lock comes first: updates queued behind a slow command of the
+            # same chat wait without holding one of the shared slots.
+            async with lock, self._slots:
                 await self.handle_update(update)
         except Exception:
             log.exception("telegram: failed to handle update %s", update.get("update_id"))
         finally:
-            if len(self._chat_locks) > 1000:
-                idle = [key for key, held in self._chat_locks.items() if not held.locked()]
-                for key in idle:
-                    del self._chat_locks[key]
+            lock, users = self._chat_locks[chat_id]
+            if users == 1:
+                del self._chat_locks[chat_id]
+            else:
+                self._chat_locks[chat_id] = (lock, users - 1)
 
     async def run(self, stop: asyncio.Event) -> None:
         me = await self.api.get_me()

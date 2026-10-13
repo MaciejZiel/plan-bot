@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import random
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -275,3 +276,60 @@ async def test_slow_command_does_not_block_other_chats(
     stop.set()
     await asyncio.wait_for(task, timeout=5)
     assert order == ["2:other", "1:first", "1:second"]  # per-chat order is preserved
+
+
+async def test_one_busy_chat_cannot_take_every_slot(
+    bot_api: tuple[FakeBotApi, TelegramApi],
+) -> None:
+    _, api = bot_api
+    gate = asyncio.Event()
+    answered: list[str] = []
+
+    class SlowRouter:
+        async def reply(
+            self, chat: ChatRef, name: str, arg: str | None = None, *, locale: str | None = None
+        ) -> Reply:
+            if chat.chat_id == "1":
+                await gate.wait()
+            answered.append(f"{chat.chat_id}:{arg}")
+            return Reply("")
+
+    adapter = TelegramAdapter(api, SlowRouter(), max_concurrency=2)  # type: ignore[arg-type]
+    # Chat 1 queues more commands than there are slots, all stuck behind a slow feed.
+    for n in range(5):
+        adapter._dispatch(message(n, f"/x {n}", chat_id=1))
+    adapter._dispatch(message(99, "/x other", chat_id=2))
+    for _ in range(100):
+        if answered:
+            break
+        await asyncio.sleep(0.01)
+    assert answered == ["2:other"]
+    gate.set()
+    await asyncio.wait(adapter._tasks, timeout=5)
+    assert answered == ["2:other", *(f"1:{n}" for n in range(5))]
+    assert adapter._chat_locks == {}  # idle chats leave no lock behind
+
+
+async def test_per_chat_order_holds_under_random_delays(
+    bot_api: tuple[FakeBotApi, TelegramApi],
+) -> None:
+    _, api = bot_api
+    rng = random.Random(1234)
+    seen: dict[str, list[int]] = {}
+
+    class JitterRouter:
+        async def reply(
+            self, chat: ChatRef, name: str, arg: str | None = None, *, locale: str | None = None
+        ) -> Reply:
+            await asyncio.sleep(rng.random() / 200)
+            seen.setdefault(chat.chat_id, []).append(int(arg or 0))
+            return Reply("")
+
+    adapter = TelegramAdapter(api, JitterRouter(), max_concurrency=3)  # type: ignore[arg-type]
+    for n in range(300):
+        adapter._dispatch(message(n, f"/x {n}", chat_id=rng.randrange(7)))
+    await asyncio.wait(adapter._tasks, timeout=10)
+    assert sum(len(v) for v in seen.values()) == 300
+    for numbers in seen.values():
+        assert numbers == sorted(numbers)
+    assert adapter._chat_locks == {}
