@@ -87,3 +87,15 @@ async def test_feed_commands_cost_more(service: BotService) -> None:
     assert "Slow down" not in await router.handle(CHAT, "subscribe", "ftp://x")  # cost 4
     assert "Slow down" in await router.handle(CHAT, "subscribe", "ftp://x")  # 1 token left
     assert "Timetable saved" in await router.handle(CHAT, "demo")  # the demo costs just 1
+
+
+async def test_first_contact_stores_only_a_non_default_language(service: BotService) -> None:
+    router = CommandRouter(service)
+    await router.reply(ChatRef("telegram", "en"), "start", locale="en-GB")
+    await router.reply(ChatRef("telegram", "de"), "help", locale="de")
+    await router.reply(ChatRef("telegram", "pl"), "start", locale="pl")
+    assert await service.repo.get(ChatRef("telegram", "en")) is None
+    assert await service.repo.get(ChatRef("telegram", "de")) is None
+    stored = await service.repo.get(ChatRef("telegram", "pl"))
+    assert stored is not None
+    assert stored.language == "pl"

@@ -116,9 +116,13 @@ class BotService:
         return sub.language if sub is not None else DEFAULT_LANG
 
     async def adopt_language(self, chat: ChatRef, hint: str | None) -> None:
-        """On first contact, start in the language of the user's app (if supported)."""
+        """On first contact, start in the language of the user's app (if supported).
+
+        Only a non-default language is stored, so a chat that merely says hello in
+        English leaves nothing behind in the database.
+        """
         lang = normalize_lang(hint)
-        if lang is not None and await self.repo.get(chat) is None:
+        if lang not in {None, DEFAULT_LANG} and await self.repo.get(chat) is None:
             await self.repo.update(chat, language=lang)
 
     async def set_language(self, chat: ChatRef, raw: str | None) -> str:
