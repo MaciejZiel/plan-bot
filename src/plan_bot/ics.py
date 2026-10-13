@@ -83,7 +83,8 @@ def parse_calendar(data: bytes | str) -> Calendar:
     try:
         cal = Calendar.from_ical(data)
     except Exception as exc:  # icalendar raises a variety of exception types
-        raise IcsError(f"not a valid iCalendar document: {exc}") from exc
+        # The parser's message can quote the feed; keep it out of replies and logs.
+        raise IcsError("not a valid iCalendar document") from exc
     if not isinstance(cal, Calendar) or cal.name != "VCALENDAR":
         raise IcsError("document does not contain a VCALENDAR")
     return cal
@@ -236,10 +237,10 @@ def _rrule_starts(
             sub_daily = SUB_DAILY.intersection(str(f).upper() for f in rule.get("FREQ", []))
             rset = rrulestr(_naive_rule(rule, tz), dtstart=naive_start, forceset=True)
         except Exception as exc:  # broken RRULE values surface as various exception types
-            log.warning("ignoring unparsable RRULE in %s: %s", master.get("UID"), exc)
+            log.warning("ignoring unparsable RRULE (%s)", type(exc).__name__)
             continue
         if sub_daily:
-            log.warning("ignoring sub-daily RRULE in %s", master.get("UID"))
+            log.warning("ignoring sub-daily RRULE")
             continue
         produced = 0
         # Iterate from DTSTART (``xafter`` would do the same internally) so that the
@@ -248,7 +249,7 @@ def _rrule_starts(
             if occurrence >= hi or produced >= MAX_OCCURRENCES_PER_EVENT:
                 break
             if step >= MAX_RULE_STEPS:
-                log.warning("RRULE in %s generates too many occurrences", master.get("UID"))
+                log.warning("RRULE generates too many occurrences")
                 break
             if step % 1000 == 999:
                 budget.check()

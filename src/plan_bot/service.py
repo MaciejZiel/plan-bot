@@ -106,6 +106,12 @@ def _on_off(raw: str | None, what: str, lang: str) -> bool:
     raise UserError(tr(lang, "on_off_usage", what=what))
 
 
+def _error_tag(exc: BaseException) -> str:
+    """A short, text-free description of why a refresh failed, safe for logs."""
+    cause = exc.__cause__ or exc
+    return str(getattr(cause, "key", None) or type(cause).__name__)
+
+
 class BotService:
     def __init__(
         self,
@@ -438,7 +444,7 @@ class BotService:
                     extra={
                         "platform": sub.platform,
                         "chat": self._chat_tag(sub),
-                        "error": str(exc),
+                        "error": _error_tag(exc),
                     },
                 )
                 if count == ERROR_NOTIFY_THRESHOLD:
