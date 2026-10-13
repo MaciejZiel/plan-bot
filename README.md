@@ -26,7 +26,9 @@
 
 plan-bot reads any timetable
 published as an iCalendar (ICS) link or exported as an `.ics` file and gives students on
-**Discord** (slash commands, embeds, buttons, plain questions) and **Telegram**:
+**Discord** (slash commands, embeds, buttons, plain questions) and **Telegram**. The public
+bot runs on Discord only; the Telegram adapter is in the code, and you can run it yourself with
+your own bot token (see [Quick start](#quick-start)):
 
 - **English and Polish**: the language follows your Discord or Telegram app on first contact,
   `/lang en|pl` overrides it
@@ -48,6 +50,23 @@ chat events into calls to it and render the answers (embeds on Discord, text on 
 > plan-bot does **not** scrape any university website. It only reads ICS links that users
 > provide. The repository ships a clearly **fictional** sample timetable
 > ("Northbridge Institute of Imaginary Computing") for demos and tests.
+
+## Importing your timetable from Gakko
+
+If your university uses Gakko (PJATK students), export the plan once and give the file to the bot:
+
+1. In Gakko open your timetable and choose **Eksportuj plan do pliku** (export to iCalendar). It
+   saves one `.ics` file for the whole semester.
+2. On Discord, run `/subscribe` and attach the file in the `file` option. The answer is private
+   and only the parsed timetable is stored, not the file.
+3. Check it with `/next`, `/today` or `/week`. When the plan changes, export it again and
+   re-upload: the reply lists what moved, changed room or was cancelled.
+
+Times in the Gakko export end in `Z`, which means UTC. plan-bot converts them to Warsaw time
+(`Europe/Warsaw`, or the timezone you configure), including the summer/winter change. A class at
+14:00 on the wall clock is `12:00Z` in summer and `13:00Z` in winter, and the bot shows 14:00 both
+times. Details and limits of uploads are in [Getting your ICS link or file](#4-getting-your-ics-link-or-file).
+File upload is a Discord feature; on Telegram use a link with `/subscribe <link>`.
 
 ## Try it in 30 seconds
 
@@ -265,7 +284,7 @@ Look in your university's timetable or student portal for an option called *expo
 calendar*, *iCal*, *ICS*, *subscribe* or *add to Google/Outlook calendar*. If it gives you a
 **link**, copy it (`webcal://` links work too) and send `/subscribe <link>` to the bot.
 
-If the portal only lets you **download a file** (for example PJATK's *Eksportuj do iCalendar*,
+If the portal only lets you **download a file** (for example PJATK's Gakko, *Eksportuj plan do pliku* (iCalendar),
 which saves one `.ics` file for the whole semester), upload that file instead. On Discord, run
 `/subscribe` and attach it in the `file` option.
 
@@ -380,7 +399,7 @@ slash commands. The bot never asks for Administrator, Manage \* or Read Message 
 |---|---|
 | `/start`, `/help` | What the bot does, and all commands |
 | `/demo` | Load the fictional sample timetable (no link needed) |
-| `/subscribe <url>` | Save your timetable link (`/setfeed` still works) |
+| `/subscribe <url>` | Save your timetable link (`/setfeed` still works). On Discord, `/subscribe` with the `file` option uploads an `.ics` file instead |
 | `/lang en\|pl` | Switch the language of this chat |
 | `/today`, `/tomorrow` | Classes for the day, with rooms and groups |
 | `/next` | Current class (if any) and the next one, with time left |
@@ -390,7 +409,7 @@ slash commands. The bot never asks for Administrator, Manage \* or Read Message 
 | `/remind 15` / `/remind off` | Reminder N minutes before each class (default 15). On Discord: `/remind set`, `/remind list`, `/remind off` |
 | `/changes on\|off` | Change alerts (default on) |
 | `/summary on\|off` | Weekly summary on Sunday at 18:00 (default on) |
-| `/refresh` | Download the feed now and show what changed |
+| `/refresh` | Download the feed now and show what changed (nothing to do for an uploaded file, re-upload it instead) |
 | `/status` | Settings, last refresh and last error |
 | `/forget` | Delete everything stored for this chat |
 
