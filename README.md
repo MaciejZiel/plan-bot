@@ -126,12 +126,19 @@ bot > Could not download the timetable: Links to private or local network addres
 
 ## Screenshots
 
-The image below is a **demo mock-up**. The message texts are real bot output for the fictional
-sample timetable, rendered into a static HTML chat frame by
-[`scripts/render_demo_chats.py`](scripts/render_demo_chats.py) and captured with Playwright. It is
-not a screenshot of the real Telegram app.
+The images below are a **demo mock-up**, not a screenshot of a real Discord server or of anyone's
+plan. The message texts are real bot output for the fictional sample timetable (`/demo`, `/next`),
+laid out in a static HTML chat frame ([`docs/screenshots/discord-demo.html`](docs/screenshots/discord-demo.html))
+and captured with Playwright at a desktop and a mobile width.
 
-<img src="docs/screenshots/telegram.png" alt="Demo mock-up of a Telegram chat with plan-bot" width="380">
+<img src="docs/screenshots/discord-demo.png" alt="Demo mock-up of Discord replies from plan-bot to /demo and /next on a fictional timetable, desktop width" width="460">
+<img src="docs/screenshots/discord-demo-mobile.png" alt="The same mock-up at mobile width" width="220">
+
+## Self-hosted
+
+The public bot runs on a home server, not on a cloud platform. Its uptime is on the
+[status page](https://status.maciejzielinski.dev). You can run your own copy; see
+[Quick start](#quick-start) and [Self-hosting on Termux](#self-hosting-on-termux).
 
 ## Architecture
 
