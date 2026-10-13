@@ -8,7 +8,8 @@ ICS link that you provide. Last updated: 2026-10-13.
 
 For each Discord user who uses the bot:
 
-- your Discord user ID (and, for older installations, the ID of a channel)
+- your Discord user ID (and, for rows created by an earlier version, the ID of a server channel;
+  a row keyed by your DM channel is moved to your user ID the next time you write to the bot)
 - the timetable (ICS) link you subscribed with, or a note that you use the fictional demo
 - your language, group filter and reminder, change-alert and weekly-summary settings
 - a copy of the classes read from your timetable (subject, time, room, description, groups),
@@ -17,8 +18,15 @@ For each Discord user who uses the bot:
   were already sent (these markers are deleted after two days)
 
 The bot does **not** store the text of your messages, your name, your avatar, your e-mail, your
-servers or your DMs. It reads a message only when you write to the bot in a DM or mention it, and
-only to decide which command you meant.
+servers or your DMs. Discord delivers the text of a message to the bot only when you write to it
+in a DM or mention it (other messages in a server arrive without their text and are ignored); the
+bot reads that text only to decide which command you meant.
+
+Answers to slash commands and buttons are visible only to you, except in your own DM with the
+bot. When you mention the bot in a server, the answer is sent to you by DM and the channel only
+sees a short note, because Discord cannot hide a normal message from the rest of the channel.
+A timetable link you post in a channel yourself is visible to that channel; use `/subscribe`
+without a link for a private form.
 
 Be careful with the link: an ICS link is often a personal secret. Anyone who has it can read your
 timetable, and some links reveal your name or student ID. The bot stores it so that it can

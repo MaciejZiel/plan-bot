@@ -38,8 +38,8 @@ chat events into calls to it and render the answers (embeds on Discord, text on 
 1. Open the invite link: **[Add plan-bot to Discord](https://discord.com/oauth2/authorize?client_id=1559599102084521994&scope=bot+applications.commands&permissions=84992)**
    (details in [Invite URL](#invite-url-and-permissions)). Add it to a server, or to your own
    account to use it in every DM and server.
-2. In any channel or in a DM with the bot, type `/demo`. Nobody else sees the answers: in
-   servers they are ephemeral.
+2. In any channel or in a DM with the bot, type `/demo`. Nobody else sees the answers: outside
+   your DM with the bot they are ephemeral.
 3. Try `/next`, `/today`, `/week`, or just write to the bot: `co mam jutro?`
 
 You cannot embed a Discord screenshot here, so this is a transcript of the real embeds
@@ -67,7 +67,8 @@ bot > ┃ Next class: Algorithms and Data Structures (lecture)
       ┃ Times in Europe/Warsaw · /help for all commands
       [ Next class ] [ Today ] [ Tomorrow ] [ Week ] [ Next week ]
 
-you > co mam jutro?                      (a plain message in a DM, or a mention in a server)
+you > co mam jutro?                      (a plain message in a DM; after a mention in a server
+                                         the answer arrives by DM)
 bot > ┃ Tomorrow · Tuesday, 13 Oct
       ┃ 12:00–13:30  Databases (lecture)
       ┃ Aula B · Dr. Ada Example (fictional) · in 1 day
@@ -268,11 +269,18 @@ calendar*, *iCal*, *ICS*, *subscribe* or *add to Google/Outlook calendar*, and c
 ### Whose timetable? (a design decision)
 
 A timetable belongs to the **user**, not to the channel: every Discord user has their own feed,
-filter and reminders, and the answer to a slash command in a server is **ephemeral** (only the
-person who asked sees it). A shared channel timetable (one feed for the whole group) is not
+filter and reminders, and the answer to a slash command is **ephemeral** (only the person who
+asked sees it) everywhere except the user's own DM with the bot, including group DMs and other
+people's DMs where a user-installed command runs. A shared channel timetable (one feed for the whole group) is not
 supported on purpose: it would need permission rules (who may change it?), and the common use
-case, "my plan", works per user. Rows created by an earlier version keyed by channel id still work
-and are still delivered to that channel.
+case, "my plan", works per user.
+
+Rows created by an earlier version were keyed by channel id. A row keyed by a user's DM channel
+is moved to that user the first time they talk to the bot in that DM (if the user already set
+things up again, the old row is dropped so nothing arrives twice). A row keyed by a server
+channel is shared, so it stays: it is still delivered to that channel and is removed
+automatically once the bot can no longer post there (channel deleted, bot removed or its
+permission revoked).
 
 Consequences:
 
@@ -282,8 +290,10 @@ Consequences:
   `/remind set` turns reminders on again after the user allows DMs.
 - If the target no longer exists (a deleted legacy channel, a deleted account, an uninvited bot),
   its data is deleted instead of being retried forever.
-- A message answered after a **mention in a server** is visible to the channel (Discord cannot
-  make a normal message ephemeral); use slash commands for private answers.
+- A **mention in a server** cannot get an ephemeral answer (Discord only has those for
+  interactions), so the channel sees a short note and the answer, which is personal, goes to the
+  author **by DM**. If their DMs are closed, the note points to the slash commands instead.
+  Help and the "I did not get that" hint are not personal and are answered in the channel.
 - `/subscribe` without a link opens a private form, because a link typed as a slash command
   option is visible to everybody in the channel. If someone does it anyway, the bot says so.
 
@@ -423,7 +433,8 @@ The public Discord bot has a short [privacy policy](PRIVACY.md) and [terms](TERM
 - Stored data per chat: chat ID, language, feed link, settings, the lesson snapshot and which reminders
   were sent. `/forget` deletes all of it immediately (cascading delete).
 - On Telegram, in a group chat everybody in the group shares the same feed and settings. On
-  Discord every user has their own, and answers to slash commands are only visible to the asker.
+  Discord every user has their own, answers to slash commands are only visible to the asker, and
+  answers to a mention in a server are sent by DM.
 - Message contents are never stored. Only commands and, on Discord, DMs and mentions addressed to
   the bot are processed, and the text is used only to pick a command. The bot needs no
   message-content intent.

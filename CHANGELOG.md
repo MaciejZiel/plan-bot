@@ -9,17 +9,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ### Added
 - Discord is first-class: localised slash commands (`pl`, `en-US`, `en-GB`) including
   `/remind set|list|off`, embeds with room, teacher and a live countdown, buttons that mirror the
-  Telegram keyboard, ephemeral answers in servers and a private form for `/subscribe`.
+  Telegram keyboard, ephemeral answers outside the user's DM with the bot and a private form for
+  `/subscribe`.
 - Plain questions in DMs and after a mention ("kiedy mam następne zajęcia?", "what's next") are
   mapped to commands by a rule-based Polish/English matcher; no model, no network, no privileged
-  intent.
+  intent. Answers to a mention in a server are sent by DM, so a timetable never shows in a
+  channel.
 - Discord reminders, change alerts and weekly summaries arrive as embeds by DM.
 - `DISCORD_DEV_GUILD_ID` syncs slash commands to one server instantly while testing
   (`DISCORD_GUILD_ID` still works).
 - Teachers are read from `Lecturer:` / `Prowadzący:` lines in the event description.
 
 ### Changed
-- Discord timetables are per user instead of per channel; existing channel rows keep working.
+- Discord timetables are per user instead of per channel. Rows keyed by a DM channel move to the
+  user on their next DM; rows keyed by a server channel keep working.
 - A Discord user who closed their DMs keeps the timetable but loses pushes; a deleted channel or
   account has its data removed.
 - The Termux installer adds the Discord extra by default.
