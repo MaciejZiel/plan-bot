@@ -9,7 +9,7 @@ import pytest
 from plan_bot.config import Settings
 from plan_bot.ics import PARSER_VERSION
 from plan_bot.repository import ChatRef, Repository
-from plan_bot.service import BotService, UserError
+from plan_bot.service import BotService, NotificationsBlocked, UserError
 from tests.conftest import FakeClock, FakeFeeds, RecordingNotifier, fixture_bytes, warsaw
 
 CHAT = ChatRef("discord", "user:7")
@@ -257,3 +257,106 @@ async def test_reupload_after_a_parser_change_does_not_list_every_class_as_chang
     assert sub.parser_version == PARSER_VERSION
     # The next upload is compared as usual.
     assert "read differently" not in await upload(service, BEFORE)
+
+
+async def test_an_upload_stays_stale_until_it_is_uploaded_again(
+    service: BotService,
+    repo: Repository,
+    feeds: FakeFeeds,
+    clock: FakeClock,
+    notifier: RecordingNotifier,
+) -> None:
+    await upload(service, BEFORE)
+    await repo.update(CHAT, parser_version=0)  # stored before the parser fix
+
+    # Refreshing never touches an upload, however many ticks and days go by.
+    for _ in range(3):
+        clock.now += timedelta(days=1)
+        assert await service.refresh_due(clock.now) == 0
+    sub = await repo.get(CHAT)
+    assert sub is not None
+    assert sub.parser_version == 0
+    assert feeds.calls == []
+    with pytest.raises(UserError, match="uploaded"):
+        await service.refresh(CHAT)
+    assert (await repo.get(CHAT)).parser_version == 0  # type: ignore[union-attr]
+
+    # Re-uploading is the only thing that brings it up to date.
+    await upload(service, AFTER)
+    sub = await repo.get(CHAT)
+    assert sub is not None
+    assert sub.parser_version == PARSER_VERSION
+
+
+async def test_a_stale_upload_gets_one_notice_and_a_warning_on_every_view(
+    service: BotService,
+    repo: Repository,
+    clock: FakeClock,
+    notifier: RecordingNotifier,
+) -> None:
+    await upload(service, BEFORE)
+    assert await service.send_reupload_notices(clock.now) == 0  # current: nothing to say
+    assert "Warning" not in await service.today(CHAT)
+
+    await repo.update(CHAT, parser_version=0)
+    assert await service.send_reupload_notices(clock.now) == 1
+    assert len(notifier.sent) == 1
+    chat, text = notifier.sent[0]
+    assert chat == CHAT
+    assert "upload the .ics file again" in text
+
+    # Once only, also across later ticks.
+    clock.now += timedelta(minutes=30)
+    assert await service.send_reupload_notices(clock.now) == 0
+    assert len(notifier.sent) == 1
+
+    # The warning stays on every view while the upload is stale.
+    for call in (service.today, service.tomorrow, service.next, service.week):
+        assert "Warning: these times may be shifted" in await call(CHAT)
+
+    # A fresh upload clears the warning.
+    await upload(service, AFTER)
+    for call in (service.today, service.next, service.week):
+        assert "Warning" not in await call(CHAT)
+
+
+async def test_the_stale_notice_is_polish_when_the_chat_is_and_retried_if_undelivered(
+    service: BotService,
+    repo: Repository,
+    clock: FakeClock,
+    notifier: RecordingNotifier,
+) -> None:
+    await repo.update(CHAT, language="pl")
+    await upload(service, BEFORE)
+    await repo.update(CHAT, parser_version=0)
+
+    # A closed DM disables pushes and sends nothing, so nothing is marked as told.
+    class Blocked:
+        async def send(self, *_: object, **__: object) -> None:
+            raise NotificationsBlocked
+
+    service.notifier = Blocked()
+    assert await service.send_reupload_notices(clock.now) == 0
+    sub = await repo.get(CHAT)
+    assert sub is not None
+    assert sub.reupload_notified == 0
+    assert "Uwaga: te godziny" in await service.today(CHAT)
+
+    service.notifier = notifier
+    assert await service.send_reupload_notices(clock.now) == 1
+    assert "Wgraj plik .ics ponownie" in notifier.texts()[0]
+
+
+async def test_link_subscriptions_never_get_the_upload_notice(
+    service: BotService,
+    repo: Repository,
+    feeds: FakeFeeds,
+    notifier: RecordingNotifier,
+    clock: FakeClock,
+) -> None:
+    feeds.payloads["https://timetable.example.org/feed.ics"] = BEFORE
+    await service.set_feed(CHAT, "https://timetable.example.org/feed.ics")
+    await repo.update(CHAT, parser_version=0)
+    assert await service.send_reupload_notices(clock.now) == 0
+    assert notifier.sent == []
+    assert "Warning" not in await service.today(CHAT)

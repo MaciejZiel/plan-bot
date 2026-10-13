@@ -15,6 +15,8 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
+from plan_bot.migrations.util import drop_column
+
 revision: str = "0003"
 down_revision: str | None = "0002"
 branch_labels: str | Sequence[str] | None = None
@@ -29,5 +31,4 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    with op.batch_alter_table("subscriptions") as batch:
-        batch.drop_column("parser_version")
+    drop_column("subscriptions", "parser_version")

@@ -44,6 +44,7 @@ class Scheduler:
         jobs: list[tuple[str, Callable[[datetime], Awaitable[int]]]] = [
             ("reminders", self.service.send_due_reminders),
             ("weekly", self.service.send_weekly_summaries),
+            ("reupload-notices", self.service.send_reupload_notices),
         ]
         if self._ticks % 120 == 0:
             jobs.append(("prune", self.service.prune))

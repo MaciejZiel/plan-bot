@@ -296,6 +296,9 @@ which saves one `.ics` file for the whole semester), upload that file instead. O
   `/refresh` has nothing to do. `/status` shows `uploaded file, <date>`. When the plan changes,
   export it again and re-upload it: the new file replaces the old one and the reply lists what
   changed (new, moved, re-roomed and cancelled classes), the same way a link refresh does.
+- After an update that changes how files are read (the `Z` fix, for example), a chat with an
+  uploaded file is told once, at the next scheduler tick, to upload it again, and `/today`,
+  `/tomorrow`, `/week` and `/next` carry a warning line until it does.
 - Only classes from about a week ago to `PLAN_BOT_HORIZON_DAYS` (150) ahead are kept, so re-upload
   after a long break.
 - The PJATK (Gakko) export writes real UTC times with a `Z` suffix and already moves them by an
@@ -567,7 +570,7 @@ uv run pytest --cov               # fails under 85 % coverage
 uv run python scripts/render_demo_chats.py docs/screenshots   # regenerate the demo mock-ups
 ```
 
-The suite has **432 tests** with **98% line coverage** (CI fails below 85%) and runs in about
+The suite has **442 tests** with **98% line coverage** (CI fails below 85%) and runs in about
 ten seconds. All tests use fictional fixtures (`tests/fixtures/*.ics` and the bundled sample).
 They cover:
 
@@ -588,6 +591,12 @@ They cover:
   health endpoint, JSON logging and token redaction, SSRF checks and the rolling demo timetable
 
 ## Limitations
+
+- Bumping `PARSER_VERSION` in `ics.py` (needed whenever the same feed can parse to different
+  classes) makes the next refresh of every link subscription a silent re-import, so a genuine
+  timetable change that arrives in that same refresh is not announced. `/refresh` says the
+  timetable was re-read instead of "no changes". Uploaded files are never refreshed: their chats
+  get a one-time re-upload notice. Bump it only when the parse result really changes.
 
 - Replies exist in English and Polish only. Discord slash commands are described in Polish and
   English; clients in other languages see English.

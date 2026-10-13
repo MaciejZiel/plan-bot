@@ -8,6 +8,7 @@ from datetime import timedelta
 import pytest
 
 from plan_bot.config import Settings
+from plan_bot.fetch import FetchError
 from plan_bot.ics import PARSER_VERSION, IcsError
 from plan_bot.repository import ChatRef, Repository
 from plan_bot.service import BotService, ChatUnavailable, NotificationsBlocked, UserError
@@ -499,3 +500,54 @@ async def test_first_refresh_after_a_parser_change_is_silent(
     clock.now += timedelta(minutes=31)
     assert await service.refresh_due(clock.now) == 1
     assert len(notifier.sent) == 1
+
+
+async def test_manual_refresh_of_a_stale_snapshot_says_it_was_re_read(
+    service: BotService, repo: Repository, feeds: FakeFeeds, clock: FakeClock
+) -> None:
+    feeds.payloads[URL] = fixture_bytes("edits_before.ics")
+    await service.set_feed(CHAT, URL)
+    await repo.update(CHAT, parser_version=0)
+    feeds.payloads[URL] = fixture_bytes("edits_after.ics")  # classes moved
+
+    reply = await service.refresh(CHAT)
+    assert "re-read with corrected class times" in reply
+    assert "no changes" not in reply.lower()
+
+    # Next time it is an ordinary comparison again.
+    assert await service.refresh(CHAT) == "Timetable refreshed, no changes."
+
+
+async def test_a_failed_refresh_right_after_the_upgrade_keeps_the_old_snapshot_and_stays_silent(
+    service: BotService,
+    repo: Repository,
+    feeds: FakeFeeds,
+    clock: FakeClock,
+    notifier: RecordingNotifier,
+) -> None:
+    feeds.payloads[URL] = fixture_bytes("edits_before.ics")
+    await service.set_feed(CHAT, URL)
+    sub = await repo.get(CHAT)
+    assert sub is not None
+    await repo.update(CHAT, parser_version=0)
+    before = await repo.lessons(sub.id)
+
+    feeds.payloads[URL] = FetchError("fetch.http", status=503)
+    clock.now += timedelta(minutes=31)
+    assert await service.refresh_due(clock.now) == 1
+    after_failure = await repo.get(CHAT)
+    assert after_failure is not None
+    assert after_failure.error_count == 1
+    assert after_failure.parser_version == 0  # still the old parser's snapshot
+    assert await repo.lessons(sub.id) == before
+    assert notifier.sent == []
+
+    # The feed comes back with different classes: still the silent re-import, then normal.
+    feeds.payloads[URL] = fixture_bytes("edits_after.ics")
+    clock.now += timedelta(hours=1)
+    assert await service.refresh_due(clock.now) == 1
+    assert notifier.sent == []
+    recovered = await repo.get(CHAT)
+    assert recovered is not None
+    assert recovered.parser_version == PARSER_VERSION
+    assert recovered.error_count == 0

@@ -257,13 +257,13 @@ class BotService:
         day = now.astimezone(self.tz).date() + timedelta(days=offset)
         selected = lessons_on(lessons, day, self.tz, self._filter(sub))
         title = tr(sub.language, title_key)
-        return DayView(title, day, tuple(selected), sub.language, self.tz, now)
+        return DayView(title, day, tuple(selected), sub.language, self.tz, now, self._warning(sub))
 
     async def next_view(self, chat: ChatRef) -> NextView:
         sub, lessons = await self._load(chat)
         now = self.clock()
         info = next_class(lessons, now, self._filter(sub))
-        return NextView(info, sub.language, self.tz, now)
+        return NextView(info, sub.language, self.tz, now, self._warning(sub))
 
     async def week_view(self, chat: ChatRef, which: str | None = None) -> WeekView:
         sub, lessons = await self._load(chat)
@@ -278,7 +278,7 @@ class BotService:
             monday += timedelta(days=7)
             title = tr(lang, "title.next_week")
         days = week_of(lessons, monday, self.tz, self._filter(sub))
-        return WeekView(title, days, lang, self.tz, now)
+        return WeekView(title, days, lang, self.tz, now, self._warning(sub))
 
     async def today(self, chat: ChatRef) -> str:
         return render_text(await self.today_view(chat))
@@ -401,7 +401,10 @@ class BotService:
             raise NoFeedError(tr(lang, "no_feed"))
         if sub.ics_url == UPLOAD_URL:
             raise UserError(tr(lang, "refresh_uploaded"))
+        was_stale = sub.parser_version < PARSER_VERSION
         changes = await self.refresh_subscription(sub, self.clock(), notify=False)
+        if was_stale:  # the snapshot was re-read, not compared: say so instead of "no changes"
+            return tr(lang, "refreshed_reparsed")
         relevant = [c for c in changes if c.lesson.matches(self._filter(sub))]
         if not relevant:
             return tr(lang, "refreshed_same")
@@ -507,10 +510,34 @@ class BotService:
                 sent += 1
         return sent
 
+    async def send_reupload_notices(self, now: datetime) -> int:
+        """Tell each chat with a stale uploaded file to upload it again, once.
+
+        An uploaded file is never refreshed, so its times stay as an older parser read
+        them until the user uploads it again.
+        """
+        sent = 0
+        for sub in await self.repo.subscriptions_with_feed():
+            if not self._stale_upload(sub) or sub.reupload_notified >= PARSER_VERSION:
+                continue
+            if await self._notify(sub, tr(sub.language, "upload_stale_notice")):
+                await self.repo.update(
+                    ChatRef(sub.platform, sub.chat_id), reupload_notified=PARSER_VERSION
+                )
+                sent += 1
+        return sent
+
     async def prune(self, now: datetime) -> int:
         return await self.repo.prune_reminders(now - timedelta(days=2))
 
     # ------------------------------------------------------------------ helpers
+
+    @staticmethod
+    def _stale_upload(sub: Subscription) -> bool:
+        return sub.ics_url == UPLOAD_URL and sub.parser_version < PARSER_VERSION
+
+    def _warning(self, sub: Subscription) -> str:
+        return tr(sub.language, "upload_stale_warning") if self._stale_upload(sub) else ""
 
     def _window(self, now: datetime) -> Window:
         # Keep the past week too, so "/week" still shows Monday on a Friday.

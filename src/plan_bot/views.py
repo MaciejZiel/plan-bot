@@ -22,6 +22,7 @@ class DayView:
     lang: str
     tz: tzinfo
     now: datetime
+    warning: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,6 +32,7 @@ class WeekView:
     lang: str
     tz: tzinfo
     now: datetime
+    warning: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,6 +41,7 @@ class NextView:
     lang: str
     tz: tzinfo
     now: datetime
+    warning: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,6 +56,12 @@ View = DayView | WeekView | NextView | ReminderView
 
 
 def render_text(view: View) -> str:
+    text = _render(view)
+    warning = getattr(view, "warning", "")
+    return f"{text}\n\n{warning}" if warning else text
+
+
+def _render(view: View) -> str:
     match view:
         case DayView():
             return format_day(view.title, view.day, list(view.lessons), view.tz, view.lang)

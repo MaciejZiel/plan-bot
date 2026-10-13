@@ -76,6 +76,8 @@ class Subscription(Base):
     error_count: Mapped[int] = mapped_column(Integer, default=0)
     #: ``ics.PARSER_VERSION`` the stored lessons were parsed with (0 = before it existed).
     parser_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    #: Parser version for which the chat was already told to re-upload its file (0 = never told).
+    reupload_notified: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=lambda: datetime.now(UTC))
 
     lessons: Mapped[list[LessonRow]] = relationship(
