@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import hmac
 import logging
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
@@ -103,6 +104,10 @@ class BotService:
         # Expanding a feed is CPU-bound: do it in a worker thread so the event loop
         # keeps answering other chats, and one at a time so feeds cannot pile up.
         self._expanding = asyncio.Lock()
+        # Chat ids are numbers from a small space: a plain hash of one is easy to
+        # reverse, so log pseudonyms are keyed with a secret only this bot knows.
+        secret = f"{settings.telegram_token or ''}:{settings.discord_token or ''}"
+        self._log_key = hashlib.sha256(b"plan-bot log pseudonym:" + secret.encode()).digest()
 
     # ----------------------------------------------------------------- language
 
@@ -308,14 +313,18 @@ class BotService:
                 count = await self.repo.record_error(sub.id, str(exc), now)
                 log.warning(
                     "feed refresh failed",
-                    extra={"platform": sub.platform, "chat": _chat_tag(sub), "error": str(exc)},
+                    extra={
+                        "platform": sub.platform,
+                        "chat": self._chat_tag(sub),
+                        "error": str(exc),
+                    },
                 )
                 if count == ERROR_NOTIFY_THRESHOLD:
                     await self._notify(
                         sub, tr(sub.language, "refresh_failing", count=count, error=exc)
                     )
             except Exception:  # one broken feed or chat must not stop the others
-                log.exception("feed refresh crashed", extra={"chat": _chat_tag(sub)})
+                log.exception("feed refresh crashed", extra={"chat": self._chat_tag(sub)})
         return refreshed
 
     async def refresh_subscription(
@@ -422,6 +431,11 @@ class BotService:
     def _filter(sub: Subscription) -> GroupFilter:
         return GroupFilter.parse(sub.group_filter)
 
+    def _chat_tag(self, sub: Subscription) -> str:
+        """Short stable pseudonym for logs, so chat ids are not written to disk."""
+        message = f"{sub.platform}:{sub.chat_id}".encode()
+        return hmac.new(self._log_key, message, hashlib.sha256).hexdigest()[:12]
+
     async def _notify(self, sub: Subscription, text: str) -> bool:
         """Send ``text``; ``False`` if the chat is gone (and its data was deleted)."""
         chat = ChatRef(sub.platform, sub.chat_id)
@@ -429,18 +443,12 @@ class BotService:
             await self.notifier.send(chat, text)
         except ChatUnavailable:
             # The user blocked the bot or left: stop working for nobody and drop their data.
-            log.info("chat unavailable, deleting its data", extra={"chat": _chat_tag(sub)})
+            log.info("chat unavailable, deleting its data", extra={"chat": self._chat_tag(sub)})
             await self.repo.delete(chat)
             return False
         except Exception:  # one broken chat must not stop the job for everybody
-            log.exception("failed to deliver a message", extra={"chat": _chat_tag(sub)})
+            log.exception("failed to deliver a message", extra={"chat": self._chat_tag(sub)})
         return True
-
-
-def _chat_tag(sub: Subscription) -> str:
-    """Short stable pseudonym for logs, so chat ids are not written to disk."""
-    digest = hashlib.sha256(f"{sub.platform}:{sub.chat_id}".encode()).hexdigest()
-    return digest[:8]
 
 
 __all__ = [

@@ -243,7 +243,8 @@ log format (`text` or `json`) and the health endpoint (`PLAN_BOT_HEALTH_PORT`,
   across DST switches.
 - **Blocked bot.** When Telegram reports that a user blocked the bot, that chat's data is deleted.
 - **Logs.** `PLAN_BOT_LOG_FORMAT=json` writes one JSON object per line. Chat ids are logged as a
-  short hash and anything that looks like a bot token is redacted.
+  short keyed hash (HMAC with a key derived from the bot token, so it cannot be reversed by
+  hashing every possible id) and anything that looks like a bot token is redacted.
 - **Health.** With `PLAN_BOT_HEALTH_PORT` set, `GET <base path>/healthz` returns 200 with
   `{"status": "ok", ...}` while the database answers and the scheduler ticks, and 503 otherwise.
   It listens on `127.0.0.1` and exposes no user data.

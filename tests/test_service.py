@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import logging
 from datetime import timedelta
 
 import pytest
@@ -367,3 +369,28 @@ async def test_refresh_survives_chats_forgetting_or_switching_feeds_meanwhile(
     other = await repo.get(OTHER)
     assert other is not None
     assert other.last_refresh_at == clock.now
+
+
+async def test_logs_use_a_keyed_pseudonym_instead_of_the_chat_id(
+    repo: Repository, settings: Settings, clock: FakeClock, caplog: pytest.LogCaptureFixture
+) -> None:
+    secret = Settings(database_url=settings.database_url, telegram_token="1:secret")
+    service = BotService(repo, FakeFeeds(), secret, clock=clock)
+    other_key = BotService(repo, FakeFeeds(), settings, clock=clock)
+    await service.set_feed(CHAT, "demo")
+
+    async def gone(chat: ChatRef, text: str) -> None:
+        raise ChatUnavailable("bot was blocked")
+
+    service.notifier.send = gone  # type: ignore[method-assign]
+    sub = await repo.get(CHAT)
+    assert sub is not None
+    tag = service._chat_tag(sub)
+    plain = hashlib.sha256(f"{CHAT.platform}:{CHAT.chat_id}".encode()).hexdigest()
+    assert tag != plain[: len(tag)]
+    assert tag != other_key._chat_tag(sub)  # the key comes from the bot's secret
+    with caplog.at_level(logging.INFO):
+        await service.send_due_reminders(warsaw(2026, 10, 12, 8, 20))
+    logged = [r for r in caplog.records if r.getMessage() == "chat unavailable, deleting its data"]
+    assert [r.__dict__["chat"] for r in logged] == [tag]
+    assert CHAT.chat_id not in caplog.text
