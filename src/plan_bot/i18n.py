@@ -204,6 +204,12 @@ _M: dict[str, dict[str, str]] = {
         "en": "That file is not an iCalendar file ({error}).",
         "pl": "Ten plik nie jest plikiem iCalendar ({error}).",
     },
+    "upload_reparsed": {
+        "en": "The previous upload was replaced. Class times were read differently before, so "
+        "no list of changes is shown this time.",
+        "pl": "Poprzedni wgrany plik został zastąpiony. Godziny zajęć były wcześniej czytane "
+        "inaczej, więc tym razem nie pokazuję listy zmian.",
+    },
     "upload_same": {
         "en": "The previous upload was replaced; no changes in upcoming classes.",
         "pl": "Poprzedni wgrany plik został zastąpiony; bez zmian w nadchodzących zajęciach.",
