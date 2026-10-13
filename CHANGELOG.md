@@ -16,7 +16,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   alerts.
 - Per-chat rate limiting, a shared feed cache and a download concurrency cap.
 - Structured JSON logging, token redaction, a `/healthz` endpoint and graceful shutdown.
-- `deploy/termux/` for self-hosting on Android; Python 3.14 support.
+- `deploy/termux/` for self-hosting under Termux; Python 3.14 support.
 
 ### Changed
 - SSRF protection now happens in the connector, on the address that is actually used; links with

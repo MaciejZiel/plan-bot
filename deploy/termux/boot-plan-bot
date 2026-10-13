@@ -1,6 +1,6 @@
 #!/data/data/com.termux/files/usr/bin/bash
 # Termux:Boot hook, installed as ~/.termux/boot/plan-bot.
-# Keeps the phone awake for the bot and restarts it if it ever exits.
+# Holds a wake lock for the bot and restarts it if it ever exits.
 termux-wake-lock
 
 APP_DIR="${APP_DIR:-$HOME/plan-bot}"

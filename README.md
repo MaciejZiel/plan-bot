@@ -251,7 +251,8 @@ log format (`text` or `json`) and the health endpoint (`PLAN_BOT_HEALTH_PORT`,
 
 ## Self-hosting on Termux
 
-[`deploy/termux/`](deploy/termux) runs the bot as a plain process on an Android phone (no Docker).
+[`deploy/termux/`](deploy/termux) runs the bot as a plain process on a self-hosted server running
+Termux (no Docker).
 Everything is configured through environment variables; the bot only makes outgoing connections
 (Telegram long polling), so no port has to be opened.
 
@@ -276,7 +277,7 @@ nano ~/.config/plan-bot/env           # paste TELEGRAM_BOT_TOKEN (from @BotFathe
   URL; the bot works without it.
 - SQLite is the default (`~/plan-bot/data/plan-bot.db`). For PostgreSQL create a dedicated
   database and role and set `DATABASE_URL=postgresql+asyncpg://...`; `asyncpg` has to be compiled
-  on Android, so SQLite is the easier choice for one small bot.
+  under Termux, so SQLite is the easier choice for one small bot.
 - Python 3.12 to 3.14 is supported (CI runs 3.12 and 3.14); Termux ships 3.14.
 
 > The scripts were checked with `bash -n` and the full start path (migrate, run, health check,

@@ -30,7 +30,7 @@ if ! mkdir "$LOCK" 2>/dev/null; then
   fi
 fi
 echo $$ >"$LOCK/pid"
-trap 'rm -rf "$LOCK"' EXIT
+trap 'rm -f "$LOCK/pid"; rmdir "$LOCK" 2>/dev/null || true' EXIT
 
 cd "$APP_DIR"
 "$APP_DIR/.venv/bin/plan-bot" migrate
