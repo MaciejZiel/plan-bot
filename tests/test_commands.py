@@ -14,7 +14,7 @@ CHAT = ChatRef("telegram", "1")
     [
         ("/today", ("today", None)),
         ("/Today@PlanBot", ("today", None)),
-        ("  /setfeed   https://x.example/a.ics ", ("setfeed", "https://x.example/a.ics")),
+        ("  /subscribe   https://x.example/a.ics ", ("subscribe", "https://x.example/a.ics")),
         ("/filter L1, C2", ("filter", "L1, C2")),
         ("hello", None),
         ("/", None),
@@ -27,13 +27,14 @@ def test_parse_command(text: str, expected: tuple[str, str | None] | None) -> No
 def test_help_lists_every_command() -> None:
     text = help_text()
     for spec in COMMANDS:
-        assert f"/{spec.name}" in text
-    assert "/setfeed <url>" in text
+        if not spec.telegram_only:
+            assert f"/{spec.name}" in text
+    assert "/subscribe <url>" in text
 
 
 async def test_router_dispatch(service: BotService) -> None:
     router = CommandRouter(service)
-    assert "Commands:" in await router.handle(CHAT, "start")
+    assert "Commands:" in await router.handle(CHAT, "help")
     assert "Unknown command /nope" in await router.handle(CHAT, "nope")
     assert "No timetable yet" in await router.handle(CHAT, "today")
     assert await router.handle_text(CHAT, "not a command") is None

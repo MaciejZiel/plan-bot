@@ -40,6 +40,8 @@ class DiscordAdapter:
         self.client = discord.Client(intents=intents)
         self.tree = app_commands.CommandTree(self.client)
         for spec in COMMANDS:
+            if spec.telegram_only:
+                continue
             self.tree.add_command(self._command(spec), guild=self.guild)
         self.client.setup_hook = self._setup_hook  # type: ignore[method-assign]
 

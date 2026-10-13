@@ -55,8 +55,8 @@ class FakeChannel:
 async def test_slash_commands_mirror_command_table() -> None:
     adapter = DiscordAdapter(FakeRouter(), "not-a-real-token")
     commands = {c.name: c for c in adapter.tree.get_commands()}
-    assert set(commands) == {spec.name for spec in COMMANDS}
-    setfeed = commands["setfeed"]
+    assert set(commands) == {spec.name for spec in COMMANDS if not spec.telegram_only}
+    setfeed = commands["subscribe"]
     assert isinstance(setfeed, app_commands.Command)
     (param,) = setfeed.parameters
     assert param.display_name == "url"
@@ -74,12 +74,12 @@ async def test_callbacks_defer_and_reply_in_chunks() -> None:
     adapter = DiscordAdapter(router, "not-a-real-token", guild_id=42)
     commands = {c.name: c for c in adapter.tree.get_commands(guild=adapter.guild)}
     interaction = FakeInteraction()
-    setfeed = commands["setfeed"]
+    setfeed = commands["subscribe"]
     assert isinstance(setfeed, app_commands.Command)
     await setfeed.callback(interaction, "demo")  # type: ignore[arg-type]
     assert interaction.response.deferred
     assert [len(p) for p in interaction.followup.sent] == [2000, 500]
-    assert router.calls == [(ChatRef("discord", "777"), "setfeed", "demo")]
+    assert router.calls == [(ChatRef("discord", "777"), "subscribe", "demo")]
 
     for name, args in (("today", ()), ("week", ()), ("week", ("next",))):
         command = commands[name]
