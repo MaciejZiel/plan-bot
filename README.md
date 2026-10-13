@@ -35,9 +35,9 @@ chat events into calls to it and render the answers (embeds on Discord, text on 
 
 **Discord** (the public demo runs here)
 
-1. Open the invite link: **[Add plan-bot to Discord](INVITE_LINK)** *(the owner replaces
-   `INVITE_LINK` with the real URL, see [Invite URL](#invite-url-and-permissions))*. Add it to a
-   server, or to your own account to use it in every DM and server.
+1. Open the invite link: **[Add plan-bot to Discord](https://discord.com/oauth2/authorize?client_id=1559599102084521994&scope=bot+applications.commands&permissions=84992)**
+   (details in [Invite URL](#invite-url-and-permissions)). Add it to a server, or to your own
+   account to use it in every DM and server.
 2. In any channel or in a DM with the bot, type `/demo`. Nobody else sees the answers: in
    servers they are ephemeral.
 3. Try `/next`, `/today`, `/week`, or just write to the bot: `co mam jutro?`
@@ -301,15 +301,15 @@ switched off in the Developer Portal.
 
 ### Invite URL and permissions
 
-Replace `YOUR_APPLICATION_ID` with the *Application ID* from the Developer Portal (General
-Information):
+The public demo's application ID is `1559599102084521994`. To run your own copy, replace it with
+the *Application ID* from your Developer Portal (General Information):
 
 ```text
 Server install (slash commands + mentions):
-https://discord.com/oauth2/authorize?client_id=YOUR_APPLICATION_ID&scope=bot+applications.commands&permissions=84992
+https://discord.com/oauth2/authorize?client_id=1559599102084521994&scope=bot+applications.commands&permissions=84992
 
 User install (DMs and every server, no invite per server; needs "User Install" enabled):
-https://discord.com/oauth2/authorize?client_id=YOUR_APPLICATION_ID&integration_type=1&scope=applications.commands
+https://discord.com/oauth2/authorize?client_id=1559599102084521994&integration_type=1&scope=applications.commands
 ```
 
 `permissions=84992` is the sum of the four bits the bot needs for mentions: **View Channels**
@@ -412,6 +412,8 @@ nano ~/.config/plan-bot/env           # paste DISCORD_BOT_TOKEN (and/or TELEGRAM
 > been run on a real Termux device.
 
 ## Privacy notes
+
+The public Discord bot has a short [privacy policy](PRIVACY.md) and [terms](TERMS.md).
 
 - An ICS link is often a **personal secret**: anyone who has it can read your timetable, and
   some links reveal your name or student ID. plan-bot stores the link in its database so it can
