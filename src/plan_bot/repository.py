@@ -103,6 +103,25 @@ class Repository:
             await session.commit()
             return True
 
+    async def move(self, old: ChatRef, new: ChatRef) -> bool:
+        """Re-key ``old``'s row (settings, lessons, reminders) to ``new``.
+
+        ``False`` and nothing changed if ``old`` does not exist or ``new`` already does.
+        """
+        async with self._sessions() as session:
+            if await self._find(session, new) is not None:
+                return False
+            sub = await self._find(session, old)
+            if sub is None:
+                return False
+            sub.platform, sub.chat_id = new.platform, new.chat_id
+            try:
+                await session.commit()
+            except IntegrityError:  # ``new`` was created concurrently
+                await session.rollback()
+                return False
+            return True
+
     async def subscriptions_with_feed(self) -> list[Subscription]:
         async with self._sessions() as session:
             stmt = select(Subscription).where(Subscription.ics_url.is_not(None))

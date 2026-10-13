@@ -1,7 +1,7 @@
 #!/data/data/com.termux/files/usr/bin/bash
 # Install or update plan-bot inside Termux. Safe to run again.
-#   bash deploy/termux/install.sh            # Telegram only
-#   WITH_DISCORD=1 bash deploy/termux/install.sh
+#   bash deploy/termux/install.sh               # Discord and Telegram support
+#   WITH_DISCORD=0 bash deploy/termux/install.sh   # Telegram only
 set -euo pipefail
 
 APP_DIR="${APP_DIR:-$HOME/plan-bot}"
@@ -19,13 +19,13 @@ export AIOHTTP_NO_EXTENSIONS=1 MULTIDICT_NO_EXTENSIONS=1 YARL_NO_EXTENSIONS=1 \
 
 "$APP_DIR/.venv/bin/pip" install --upgrade pip
 extras=""
-if [ "${WITH_DISCORD:-0}" = "1" ]; then extras="[discord]"; fi
+if [ "${WITH_DISCORD:-1}" = "1" ]; then extras="[discord]"; fi
 "$APP_DIR/.venv/bin/pip" install --upgrade "$SRC_DIR$extras"
 
 if [ ! -f "$CONFIG_DIR/env" ]; then
   cp "$SRC_DIR/deploy/termux/env.example" "$CONFIG_DIR/env"
   chmod 600 "$CONFIG_DIR/env"
-  echo "Created $CONFIG_DIR/env: put TELEGRAM_BOT_TOKEN in it before starting."
+  echo "Created $CONFIG_DIR/env: put DISCORD_BOT_TOKEN (or TELEGRAM_BOT_TOKEN) in it before starting."
 fi
 
 install -m 755 "$SRC_DIR/deploy/termux/start.sh" "$APP_DIR/start.sh"

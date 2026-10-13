@@ -10,7 +10,8 @@ import pytest
 from plan_bot.config import Settings
 from plan_bot.ics import IcsError
 from plan_bot.repository import ChatRef, Repository
-from plan_bot.service import BotService, ChatUnavailable, UserError
+from plan_bot.service import BotService, ChatUnavailable, NotificationsBlocked, UserError
+from plan_bot.views import DayView, NextView, ReminderView, View, WeekView, render_text
 from tests.conftest import FakeClock, FakeFeeds, RecordingNotifier, fixture_bytes, warsaw
 
 CHAT = ChatRef("telegram", "100")
@@ -236,7 +237,7 @@ async def test_blocked_chats_are_forgotten(
 ) -> None:
     await service.set_feed(CHAT, "demo")
 
-    async def gone(chat: ChatRef, text: str) -> None:
+    async def gone(chat: ChatRef, text: str, view: View | None = None) -> None:
         raise ChatUnavailable("bot was blocked")
 
     service.notifier.send = gone  # type: ignore[method-assign]
@@ -305,7 +306,7 @@ async def test_weekly_summary_to_a_blocked_chat_does_not_recreate_it(
 ) -> None:
     await service.set_feed(CHAT, "demo")
 
-    async def gone(chat: ChatRef, text: str) -> None:
+    async def gone(chat: ChatRef, text: str, view: View | None = None) -> None:
         raise ChatUnavailable("bot was blocked")
 
     service.notifier.send = gone  # type: ignore[method-assign]
@@ -379,7 +380,7 @@ async def test_logs_use_a_keyed_pseudonym_instead_of_the_chat_id(
     other_key = BotService(repo, FakeFeeds(), settings, clock=clock)
     await service.set_feed(CHAT, "demo")
 
-    async def gone(chat: ChatRef, text: str) -> None:
+    async def gone(chat: ChatRef, text: str, view: View | None = None) -> None:
         raise ChatUnavailable("bot was blocked")
 
     service.notifier.send = gone  # type: ignore[method-assign]
@@ -411,3 +412,59 @@ async def test_oversized_feed_gets_its_own_message(
     await repo.update(CHAT, language=lang)
     with pytest.raises(UserError, match=text):
         await service.set_feed(CHAT, URL)
+
+
+async def test_blocked_dms_switch_pushes_off_but_keep_the_timetable(
+    service: BotService, repo: Repository, clock: FakeClock
+) -> None:
+    await service.set_feed(CHAT, "demo")
+
+    async def closed(chat: ChatRef, text: str, view: View | None = None) -> None:
+        raise NotificationsBlocked("DMs are closed")
+
+    service.notifier.send = closed  # type: ignore[method-assign]
+    clock.now = warsaw(2026, 10, 12, 8, 20)
+    assert await service.send_due_reminders(clock.now) == 1
+    sub = await repo.get(CHAT)
+    assert sub is not None
+    assert sub.ics_url == "demo"
+    assert (sub.reminder_minutes, sub.notify_changes, sub.weekly_summary) == (0, False, False)
+    assert len(await repo.lessons(sub.id)) > 0
+
+
+async def test_reminders_and_summaries_carry_a_view(
+    service: BotService, clock: FakeClock, notifier: RecordingNotifier
+) -> None:
+    await service.set_feed(CHAT, "demo")
+    clock.now = warsaw(2026, 10, 12, 8, 20)
+    await service.send_due_reminders(clock.now)
+    assert isinstance(notifier.views[-1], ReminderView)
+    assert render_text(notifier.views[-1]) == notifier.texts()[-1]
+    await service.send_weekly_summaries(warsaw(2026, 10, 18, 18, 5))
+    assert isinstance(notifier.views[-1], WeekView)
+
+
+async def test_views_match_the_text_answers(service: BotService) -> None:
+    await service.set_feed(CHAT, "demo")
+    today = await service.today_view(CHAT)
+    assert isinstance(today, DayView)
+    assert render_text(today) == await service.today(CHAT)
+    tomorrow = await service.tomorrow_view(CHAT)
+    assert render_text(tomorrow) == await service.tomorrow(CHAT)
+    nxt = await service.next_view(CHAT)
+    assert isinstance(nxt, NextView)
+    assert nxt.info.upcoming is not None
+    assert nxt.info.upcoming.teacher == "Prof. Alan Placeholder (fictional)"
+    assert render_text(nxt) == await service.next(CHAT)
+    week = await service.week_view(CHAT, "next")
+    assert render_text(week) == await service.week(CHAT, "next")
+    with pytest.raises(UserError, match="Use /week"):
+        await service.week_view(CHAT, "later")
+
+
+async def test_remind_list_reports_the_current_setting(service: BotService) -> None:
+    await service.set_feed(CHAT, "demo")
+    assert await service.set_reminder(CHAT, "list") == "Reminders are on, 15 min before each class."
+    await service.set_reminder(CHAT, "off")
+    assert await service.set_reminder(CHAT, "status") == "Reminders are off."
+    assert await service.set_reminder(OTHER, "list") == "Reminders are off."

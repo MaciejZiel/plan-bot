@@ -13,6 +13,7 @@ from plan_bot.db import create_engine, migrate, session_factory
 from plan_bot.fetch import FetchError
 from plan_bot.repository import ChatRef, Repository
 from plan_bot.service import BotService
+from plan_bot.views import View
 
 FIXTURES = Path(__file__).parent / "fixtures"
 SAMPLE = Path(__file__).parents[1] / "src" / "plan_bot" / "data" / "sample.ics"
@@ -82,12 +83,14 @@ class FakeFeeds:
 class RecordingNotifier:
     def __init__(self) -> None:
         self.sent: list[tuple[ChatRef, str]] = []
+        self.views: list[View | None] = []
         self.fail = False
 
-    async def send(self, chat: ChatRef, text: str) -> None:
+    async def send(self, chat: ChatRef, text: str, view: View | None = None) -> None:
         if self.fail:
             raise RuntimeError("platform down")
         self.sent.append((chat, text))
+        self.views.append(view)
 
     def texts(self) -> list[str]:
         return [text for _, text in self.sent]

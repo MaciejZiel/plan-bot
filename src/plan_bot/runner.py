@@ -14,6 +14,7 @@ import aiohttp
 from plan_bot.app import build_app
 from plan_bot.config import Settings
 from plan_bot.repository import ChatRef
+from plan_bot.views import View
 
 log = logging.getLogger(__name__)
 
@@ -37,12 +38,15 @@ class MultiNotifier:
     def register(self, adapter: Adapter) -> None:
         self.adapters[adapter.platform] = adapter
 
-    async def send(self, chat: ChatRef, text: str) -> None:
+    async def send(self, chat: ChatRef, text: str, view: View | None = None) -> None:
         adapter = self.adapters.get(chat.platform)
         if adapter is None:
             log.warning("no adapter running for %s, message dropped", chat.platform)
             return
-        await adapter.send(chat, text)
+        if view is not None and getattr(adapter, "supports_views", False):
+            await adapter.send(chat, text, view)  # type: ignore[call-arg]
+        else:
+            await adapter.send(chat, text)
 
 
 async def run_bots(

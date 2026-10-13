@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import replace
+from typing import Any
 
 import pytest
 
@@ -32,6 +33,26 @@ async def test_multi_notifier_routes_by_platform() -> None:
     await notifier.send(ChatRef("telegram", "1"), "hi")
     await notifier.send(ChatRef("discord", "2"), "dropped")
     assert telegram.sent == [(ChatRef("telegram", "1"), "hi")]
+
+
+async def test_multi_notifier_passes_views_only_to_adapters_that_render_them() -> None:
+    class RichAdapter(FakeAdapter):
+        supports_views = True
+
+        async def send(self, chat: ChatRef, text: str, view: object = None) -> None:
+            self.sent.append((chat, f"{text}|{view}"))
+
+    notifier = MultiNotifier()
+    plain = FakeAdapter("telegram")
+    rich = RichAdapter("discord")
+    notifier.register(plain)
+    notifier.register(rich)
+    marker: Any = "view"
+    await notifier.send(ChatRef("telegram", "1"), "hi", marker)
+    await notifier.send(ChatRef("discord", "2"), "hi", marker)
+    await notifier.send(ChatRef("discord", "2"), "bare")
+    assert plain.sent == [(ChatRef("telegram", "1"), "hi")]
+    assert [text for _, text in rich.sent] == ["hi|view", "bare|None"]
 
 
 async def test_requires_a_token(settings: Settings) -> None:

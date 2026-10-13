@@ -22,10 +22,6 @@ from plan_bot.domain import GroupFilter, Lesson
 from plan_bot.fetch import DEMO_URL, FetchError, demo_calendar, normalize_url, redact_url
 from plan_bot.formatting import (
     format_changes,
-    format_day,
-    format_next,
-    format_reminder,
-    format_week,
     humanize,
 )
 from plan_bot.i18n import DEFAULT_LANG, LANGS, normalize_lang, tr
@@ -39,6 +35,7 @@ from plan_bot.timetable import (
     starting_between,
     week_of,
 )
+from plan_bot.views import DayView, NextView, ReminderView, View, WeekView, render_text
 
 log = logging.getLogger(__name__)
 
@@ -59,16 +56,23 @@ class ChatUnavailable(Exception):
     """Raised by a notifier when the chat is gone (the user blocked the bot, left, ...)."""
 
 
+class NotificationsBlocked(Exception):
+    """Raised by a notifier when the user can no longer be messaged but still exists.
+
+    Example: a Discord user closed their DMs. The timetable stays; pushes are switched off.
+    """
+
+
 class FeedSource(Protocol):
     async def fetch(self, url: str) -> bytes: ...
 
 
 class Notifier(Protocol):
-    async def send(self, chat: ChatRef, text: str) -> None: ...
+    async def send(self, chat: ChatRef, text: str, view: View | None = None) -> None: ...
 
 
 class NullNotifier:
-    async def send(self, chat: ChatRef, text: str) -> None:
+    async def send(self, chat: ChatRef, text: str, view: View | None = None) -> None:
         log.info("no notifier configured, dropping message for %s", chat)
 
 
@@ -165,38 +169,52 @@ class BotService:
             lines.append(tr(lang, "saved_demo"))
         return "\n".join(lines)
 
-    async def today(self, chat: ChatRef) -> str:
-        sub, lessons = await self._load(chat)
-        day = self.clock().astimezone(self.tz).date()
-        selected = lessons_on(lessons, day, self.tz, self._filter(sub))
-        return format_day(tr(sub.language, "title.today"), day, selected, self.tz, sub.language)
+    async def today_view(self, chat: ChatRef) -> DayView:
+        return await self._day_view(chat, 0, "title.today")
 
-    async def tomorrow(self, chat: ChatRef) -> str:
-        sub, lessons = await self._load(chat)
-        day = self.clock().astimezone(self.tz).date() + timedelta(days=1)
-        selected = lessons_on(lessons, day, self.tz, self._filter(sub))
-        title = tr(sub.language, "title.tomorrow")
-        return format_day(title, day, selected, self.tz, sub.language)
+    async def tomorrow_view(self, chat: ChatRef) -> DayView:
+        return await self._day_view(chat, 1, "title.tomorrow")
 
-    async def next(self, chat: ChatRef) -> str:
+    async def _day_view(self, chat: ChatRef, offset: int, title_key: str) -> DayView:
+        sub, lessons = await self._load(chat)
+        now = self.clock()
+        day = now.astimezone(self.tz).date() + timedelta(days=offset)
+        selected = lessons_on(lessons, day, self.tz, self._filter(sub))
+        title = tr(sub.language, title_key)
+        return DayView(title, day, tuple(selected), sub.language, self.tz, now)
+
+    async def next_view(self, chat: ChatRef) -> NextView:
         sub, lessons = await self._load(chat)
         now = self.clock()
         info = next_class(lessons, now, self._filter(sub))
-        return format_next(info, now, self.tz, sub.language)
+        return NextView(info, sub.language, self.tz, now)
 
-    async def week(self, chat: ChatRef, which: str | None = None) -> str:
+    async def week_view(self, chat: ChatRef, which: str | None = None) -> WeekView:
         sub, lessons = await self._load(chat)
         lang = sub.language
         choice = (which or "").strip().lower()
         if choice not in {"", "this", "next"}:
             raise UserError(tr(lang, "week_usage"))
-        monday = monday_of(self.clock().astimezone(self.tz).date())
+        now = self.clock()
+        monday = monday_of(now.astimezone(self.tz).date())
         title = tr(lang, "title.week")
         if choice == "next":
             monday += timedelta(days=7)
             title = tr(lang, "title.next_week")
         days = week_of(lessons, monday, self.tz, self._filter(sub))
-        return format_week(days, self.tz, title=title, lang=lang)
+        return WeekView(title, days, lang, self.tz, now)
+
+    async def today(self, chat: ChatRef) -> str:
+        return render_text(await self.today_view(chat))
+
+    async def tomorrow(self, chat: ChatRef) -> str:
+        return render_text(await self.tomorrow_view(chat))
+
+    async def next(self, chat: ChatRef) -> str:
+        return render_text(await self.next_view(chat))
+
+    async def week(self, chat: ChatRef, which: str | None = None) -> str:
+        return render_text(await self.week_view(chat, which))
 
     async def groups(self, chat: ChatRef) -> str:
         sub, lessons = await self._load(chat)
@@ -232,6 +250,12 @@ class BotService:
     async def set_reminder(self, chat: ChatRef, raw: str | None) -> str:
         lang = await self.language(chat)
         value = (raw or "").strip().lower()
+        if value in {"list", "status"}:
+            sub = await self.repo.get(chat)
+            minutes = sub.reminder_minutes if sub is not None else 0
+            if not minutes:
+                return tr(lang, "remind_off")
+            return tr(lang, "remind_current", delta=humanize(timedelta(minutes=minutes), lang))
         if value in {"off", "0", "no"}:
             await self.repo.update(chat, reminder_minutes=0)
             return tr(lang, "remind_off")
@@ -361,7 +385,8 @@ class BotService:
             lessons = await self.repo.lessons(sub.id, start=now, end=horizon)
             for lesson in starting_between(lessons, now, horizon, self._filter(sub)):
                 if await self.repo.mark_reminded(sub.id, lesson.key, lesson.start):
-                    await self._notify(sub, format_reminder(lesson, now, self.tz, sub.language))
+                    view = ReminderView(lesson, sub.language, self.tz, now)
+                    await self._notify(sub, render_text(view), view)
                     sent += 1
         return sent
 
@@ -382,8 +407,8 @@ class BotService:
             lessons = await self.repo.lessons(sub.id)
             days = week_of(lessons, monday, self.tz, self._filter(sub))
             title = tr(sub.language, "title.coming_week")
-            text = format_week(days, self.tz, title=title, lang=sub.language)
-            if await self._notify(sub, text):
+            summary = WeekView(title, days, sub.language, self.tz, now)
+            if await self._notify(sub, render_text(summary), summary):
                 await self.repo.update(ChatRef(sub.platform, sub.chat_id), last_weekly_key=key)
                 sent += 1
         return sent
@@ -437,6 +462,18 @@ class BotService:
     def _filter(sub: Subscription) -> GroupFilter:
         return GroupFilter.parse(sub.group_filter)
 
+    async def adopt_chat(self, old: ChatRef, new: ChatRef) -> bool:
+        """Move an older row to the chat's current key (e.g. a Discord DM channel to its user)."""
+        tags = {"chat": self._chat_tag(new), "previous": self._chat_tag(old)}
+        if await self.repo.move(old, new):
+            log.info("chat re-keyed", extra=tags)
+            return True
+        # Both exist: the user already set things up again under the new key. Keeping
+        # the old row would deliver every reminder twice.
+        if await self.repo.get(new) is not None and await self.repo.delete(old):
+            log.info("duplicate chat row dropped", extra=tags)
+        return False
+
     async def chat_gone(self, chat: ChatRef) -> None:
         """The user blocked the bot or left: stop working for nobody and drop their data."""
         log.info("chat unavailable, deleting its data", extra={"chat": self._chat_tag(chat)})
@@ -447,13 +484,26 @@ class BotService:
         message = f"{sub.platform}:{sub.chat_id}".encode()
         return hmac.new(self._log_key, message, hashlib.sha256).hexdigest()[:12]
 
-    async def _notify(self, sub: Subscription, text: str) -> bool:
-        """Send ``text``; ``False`` if the chat is gone (and its data was deleted)."""
+    async def _notify(self, sub: Subscription, text: str, view: View | None = None) -> bool:
+        """Send ``text``; ``False`` if it could not be delivered for good.
+
+        A chat that is gone has its data deleted; a user who can no longer be messaged
+        keeps the timetable but loses all pushes (reminders, change alerts, summaries).
+        """
         chat = ChatRef(sub.platform, sub.chat_id)
         try:
-            await self.notifier.send(chat, text)
+            if view is None:
+                await self.notifier.send(chat, text)
+            else:
+                await self.notifier.send(chat, text, view)
         except ChatUnavailable:
             await self.chat_gone(chat)
+            return False
+        except NotificationsBlocked:
+            log.info("notifications blocked, disabling them", extra={"chat": self._chat_tag(sub)})
+            await self.repo.update(
+                chat, reminder_minutes=0, notify_changes=False, weekly_summary=False
+            )
             return False
         except Exception:  # one broken chat must not stop the job for everybody
             log.exception("failed to deliver a message", extra={"chat": self._chat_tag(sub)})
@@ -466,6 +516,7 @@ __all__ = [
     "ChatUnavailable",
     "FeedSource",
     "NoFeedError",
+    "NotificationsBlocked",
     "Notifier",
     "UserError",
     "utc_now",

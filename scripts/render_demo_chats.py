@@ -24,6 +24,7 @@ from plan_bot.db import create_engine, migrate, session_factory
 from plan_bot.fetch import demo_calendar
 from plan_bot.repository import ChatRef, Repository
 from plan_bot.service import BotService
+from plan_bot.views import View
 
 TZ = ZoneInfo("Europe/Warsaw")
 FEED = "https://timetable.example.edu/ical/your-personal-token.ics"
@@ -83,12 +84,12 @@ class Recorder:
         self.bubbles: list[Bubble] = []
         self.platform = "telegram"
 
-    async def send(self, chat: ChatRef, text: str) -> None:
+    async def send(self, chat: ChatRef, text: str, view: View | None = None) -> None:
         if chat.platform == self.platform:
             self.bubbles.append(Bubble("bot", text, self.clock.now))
 
 
-async def transcripts(workdir: Path) -> tuple[list[Bubble], list[Bubble]]:
+async def transcripts(workdir: Path) -> list[Bubble]:
     url = f"sqlite+aiosqlite:///{workdir / 'demo.db'}"
     await migrate(url)
     engine = create_engine(url)
@@ -121,19 +122,8 @@ async def transcripts(workdir: Path) -> tuple[list[Bubble], list[Bubble]]:
     feeds.edited = True
     await service.refresh_due(clock.now)
     telegram = recorder.bubbles
-    recorder.bubbles = []
-    recorder.platform = "discord"
-
-    dc = ChatRef("discord", "2")
-    clock.now = datetime(2026, 10, 13, 9, 5, tzinfo=TZ)
-    await say(dc, "/demo")
-    await say(dc, "/filter L2,C2")
-    await say(dc, "/tomorrow")
-    clock.now = datetime(2026, 10, 18, 18, 0, tzinfo=TZ)
-    await service.send_weekly_summaries(clock.now)
-    discord = recorder.bubbles
     await engine.dispose()
-    return telegram, discord
+    return telegram
 
 
 BANNER = (
@@ -169,40 +159,11 @@ pre{{margin:0;white-space:pre-wrap;font:inherit}}
 {BANNER}<div class="chat">{"".join(rows)}</div></div>"""
 
 
-def discord_html(bubbles: list[Bubble]) -> str:
-    rows = []
-    for b in bubbles:
-        who = "plan-bot" if b.sender == "bot" else "student"
-        tag = '<span class="tag">APP</span>' if b.sender == "bot" else ""
-        color = "#5865f2" if b.sender == "bot" else "#3ba55c"
-        rows.append(
-            f'<div class="row"><div class="av" style="background:{color}">{who[0].upper()}</div>'
-            f'<div><div class="who">{who}{tag}<span class="ts">{b.time:%d.%m.%Y %H:%M}</span>'
-            f"</div><pre>{html.escape(b.text)}</pre></div></div>"
-        )
-    return f"""<!doctype html><meta charset="utf-8"><title>Discord demo</title>
-<style>
-body{{margin:0;background:#313338;color:#dbdee1;font:15px/1.4 "gg sans","Segoe UI",Roboto,sans-serif}}
-.window{{width:640px;margin:0 auto}}
-.head{{padding:12px 16px;border-bottom:1px solid #1f2023;font-weight:600;color:#f2f3f5}}
-.head span{{color:#80848e;font-weight:400}}
-.banner{{background:#4e3d00;color:#ffd666;font-size:12px;text-align:center;padding:6px}}
-.row{{display:flex;gap:14px;padding:8px 16px}}
-.av{{flex:0 0 40px;height:40px;border-radius:50%;display:grid;place-items:center;color:#fff;font-weight:700}}
-.who{{font-weight:600;color:#f2f3f5}} .ts{{color:#949ba4;font-size:12px;font-weight:400;margin-left:8px}}
-.tag{{background:#5865f2;color:#fff;font-size:10px;padding:1px 4px;border-radius:3px;margin-left:6px}}
-pre{{margin:2px 0 0;white-space:pre-wrap;font:inherit}}
-</style>
-<div class="window"><div class="head"># timetable <span>· study group server</span></div>
-{BANNER}{"".join(rows)}</div>"""
-
-
 async def main(out: Path) -> None:
     out.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory() as tmp:
-        telegram, discord = await transcripts(Path(tmp))
+        telegram = await transcripts(Path(tmp))
     (out / "telegram.html").write_text(telegram_html(telegram), encoding="utf-8")
-    (out / "discord.html").write_text(discord_html(discord), encoding="utf-8")
 
 
 if __name__ == "__main__":

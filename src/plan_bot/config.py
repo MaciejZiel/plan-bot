@@ -44,7 +44,7 @@ class Settings:
     discord_token: str | None = None
     #: Override to use a self-hosted Bot API server (or a test double).
     telegram_api_url: str = "https://api.telegram.org"
-    #: Optional: sync slash commands to one server instantly instead of globally.
+    #: Optional dev server: sync slash commands there only (instant) instead of globally.
     discord_guild_id: int | None = None
     database_url: str = DEFAULT_DATABASE_URL
     timezone: ZoneInfo = field(default_factory=lambda: ZoneInfo("Europe/Warsaw"))
@@ -100,7 +100,9 @@ class Settings:
             telegram_token=env.get("TELEGRAM_BOT_TOKEN", "").strip() or None,
             telegram_api_url=env.get("TELEGRAM_API_URL", "").strip() or "https://api.telegram.org",
             discord_token=env.get("DISCORD_BOT_TOKEN", "").strip() or None,
-            discord_guild_id=_int(env, "DISCORD_GUILD_ID", 0) or None,
+            discord_guild_id=(
+                _int(env, "DISCORD_DEV_GUILD_ID", 0) or _int(env, "DISCORD_GUILD_ID", 0) or None
+            ),
             database_url=env.get("DATABASE_URL", "").strip() or DEFAULT_DATABASE_URL,
             timezone=tz,
             refresh_minutes=_int(env, "PLAN_BOT_REFRESH_MINUTES", 30, minimum=5),

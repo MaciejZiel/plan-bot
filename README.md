@@ -7,9 +7,13 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 **Your university timetable, answered in the chat you already use.** plan-bot reads any timetable
-published as an iCalendar (ICS) link and gives students on **Telegram** and **Discord**:
+published as an iCalendar (ICS) link and gives students on **Discord** (slash commands, embeds,
+buttons, plain questions) and **Telegram**:
 
-- **English and Polish**: the language follows the Telegram app on first contact, `/lang en|pl`
+- **English and Polish**: the language follows your Discord or Telegram app on first contact,
+  `/lang en|pl` overrides it
+- **plain questions**: DM the bot or mention it ("kiedy mam następne zajęcia?", "what's next")
+  and a small keyword matcher (no AI model, no paid API) picks the right command
 - **a demo that needs nothing**: `/demo` loads a fictional sample timetable so anyone can try
   every feature in seconds, no university link required
 - **today / tomorrow / this week**: `/today`, `/tomorrow`, `/week`, `/week next`
@@ -20,8 +24,8 @@ published as an iCalendar (ICS) link and gives students on **Telegram** and **Di
 - **weekly summary** on Sunday evening
 - **group filters** (`/filter L1,C2`) for lab/exercise groups
 
-One platform-independent core does all the work. The Telegram and Discord adapters only turn
-chat events into calls to it.
+One platform-independent core does all the work. The Discord and Telegram adapters only turn
+chat events into calls to it and render the answers (embeds on Discord, text on Telegram).
 
 > plan-bot does **not** scrape any university website. It only reads ICS links that users
 > provide. The repository ships a clearly **fictional** sample timetable
@@ -29,17 +33,21 @@ chat events into calls to it.
 
 ## Try it in 30 seconds
 
-Open the bot in Telegram (the owner publishes the `@username` after deploying it), then:
+**Discord** (the public demo runs here)
+
+1. Open the invite link: **[Add plan-bot to Discord](https://discord.com/oauth2/authorize?client_id=1559599102084521994&scope=bot+applications.commands&permissions=84992)**
+   (details in [Invite URL](#invite-url-and-permissions)). Add it to a server, or to your own
+   account to use it in every DM and server.
+2. In any channel or in a DM with the bot, type `/demo`. Nobody else sees the answers: outside
+   your DM with the bot they are ephemeral.
+3. Try `/next`, `/today`, `/week`, or just write to the bot: `co mam jutro?`
+
+You cannot embed a Discord screenshot here, so this is a transcript of the real embeds
+(generated against the fictional sample timetable with the clock set to Monday 12 Oct, 07:45;
+`<t:…:R>` is Discord's relative-time markup and renders as "in 45 minutes").
 
 ```text
-you > /start
-bot > Hi! I show your university timetable right in this chat: the next class, today, the
-      week, reminders before each class and alerts when something changes.
-      No timetable at hand? Tap "Try the demo" to see it with a fictional sample.
-      Your own: /subscribe <ICS link>. All commands: /help
-      [ Try the demo ]  [ English | Polski ]
-
-you > (taps "Try the demo")
+you > /demo
 bot > Timetable saved (bundled fictional demo timetable).
       164 upcoming classes found.
       Groups in this timetable: C1, C2, EN-B2, L1, L2
@@ -51,36 +59,73 @@ bot > Timetable saved (bundled fictional demo timetable).
       [ Remind 15 min ] [ Remind 60 min ] [ No reminders ]
 
 you > /next
+bot > ┃ Next class: Algorithms and Data Structures (lecture)
+      ┃ Mon 12 Oct, 08:30–10:00
+      ┃ starts in 45 minutes
+      ┃ Room                 Teacher
+      ┃ A-101                Prof. Alan Placeholder (fictional)
+      ┃ Times in Europe/Warsaw · /help for all commands
+      [ Next class ] [ Today ] [ Tomorrow ] [ Week ] [ Next week ]
+
+you > co mam jutro?                      (a plain message in a DM; after a mention in a server
+                                         the answer arrives by DM)
+bot > ┃ Tomorrow · Tuesday, 13 Oct
+      ┃ 12:00–13:30  Databases (lecture)
+      ┃ Aula B · Dr. Ada Example (fictional) · in 1 day
+      ┃ 14:00–15:30  Databases (exercises)
+      ┃ C-12 · C1 · in 1 day
+      ┃ 15:45–17:15  Databases (exercises)
+      ┃ C-12 · C2 · in 1 day
+      [ Next class ] [ Today ] [ Tomorrow ] [ Week ] [ Next week ]
+
+you > /remind set minutes:30
+bot > I will remind you 30 min before each class.
+
+you > asdf
+bot > I did not get that. I can show your timetable: ask for the next class, today, tomorrow or
+      the week, or use the buttons below. /help lists all commands.
+```
+
+At the time a class is 30 minutes away, the bot sends the same style of embed as a direct
+message ("Reminder: Algorithms and Data Structures (lecture)", with room, teacher and the
+countdown).
+
+Your own timetable: `/subscribe` without a link opens a private form for it (so the link does not
+show in the channel), or send `/subscribe https://…/plan.ics`.
+
+**Telegram** works the same way with plain-text replies and inline buttons. The transcript is real
+output (generated with `plan-bot console --at 2026-10-12T07:45`):
+
+```text
+you > /start
+bot > Hi! I show your university timetable right in this chat: the next class, today, the
+      week, reminders before each class and alerts when something changes.
+      No timetable at hand? Tap "Try the demo" to see it with a fictional sample.
+      Your own: /subscribe <ICS link>. All commands: /help
+      [ Try the demo ]  [ English | Polski ]
+
+you > (taps "Try the demo")
+bot > Timetable saved (bundled fictional demo timetable).
+      ...
+
+you > /next
 bot > Next: Algorithms and Data Structures (lecture)
       Mon 12 Oct, 08:30–10:00 · A-101
       Starts in 45 min.
 
-you > /lang pl
-bot > Język: polski.
-
-you > /next
-bot > Następne: Algorithms and Data Structures (lecture)
-      pon. 12 paź, 08:30–10:00 · A-101
-      Start za 45 min.
-
 you > /subscribe http://169.254.169.254/latest/meta-data
-bot > Nie udało się pobrać planu: Linki do adresów prywatnych lub lokalnych nie są dozwolone
+bot > Could not download the timetable: Links to private or local network addresses are not
+      allowed
 ```
-
-This transcript is real output (generated with `plan-bot console --at 2026-10-12T07:45`; in
-Telegram the same replies come with the inline buttons shown in brackets). A private chat is
-enough to try it; the bot does not have to be added to a group.
 
 ## Screenshots
 
-The images below are **demo mock-ups**. The message texts are real bot output for the
-fictional sample timetable, rendered into a static HTML chat frame by
-[`scripts/render_demo_chats.py`](scripts/render_demo_chats.py) and captured with Playwright.
-They are not screenshots of the real Telegram or Discord apps.
+The image below is a **demo mock-up**. The message texts are real bot output for the fictional
+sample timetable, rendered into a static HTML chat frame by
+[`scripts/render_demo_chats.py`](scripts/render_demo_chats.py) and captured with Playwright. It is
+not a screenshot of the real Telegram app.
 
-| Telegram (demo) | Discord (demo) |
-|---|---|
-| <img src="docs/screenshots/telegram.png" alt="Demo mock-up of a Telegram chat with plan-bot" width="380"> | <img src="docs/screenshots/discord.png" alt="Demo mock-up of a Discord channel with plan-bot" width="420"> |
+<img src="docs/screenshots/telegram.png" alt="Demo mock-up of a Telegram chat with plan-bot" width="380">
 
 ## Architecture
 
@@ -88,19 +133,19 @@ They are not screenshots of the real Telegram or Discord apps.
 flowchart LR
     subgraph Chat platforms
         TG[Telegram Bot API<br/>long polling]
-        DC[Discord gateway<br/>slash commands]
+        DC[Discord gateway<br/>slash commands · DMs · mentions]
         CLI[Console<br/>plan-bot console]
     end
     subgraph plan_bot
         TA[adapters/telegram.py]
-        DA[adapters/discord.py]
+        DA[adapters/discord.py<br/>discord_render.py embeds]
         R[commands.py<br/>CommandRouter]
         S[service.py<br/>BotService]
         SCH[scheduler.py<br/>asyncio tick]
         F[fetch.py<br/>size/timeout/SSRF guard]
         I[ics.py<br/>RRULE · EXDATE · RECURRENCE-ID · DST]
         D[diff.py<br/>change detection]
-        T[timetable.py + formatting.py]
+        T[timetable.py + formatting.py<br/>views.py · intent.py]
         REPO[repository.py]
     end
     DB[(SQLite / PostgreSQL<br/>SQLAlchemy 2 + Alembic)]
@@ -140,7 +185,20 @@ uv run plan-bot console --at 2026-10-12T07:45   # pretend it is a Monday morning
 > /next
 ```
 
-### 2. Create bot tokens
+### 2. Create the bot
+
+**Discord**
+1. Go to the [Discord Developer Portal](https://discord.com/developers/applications) and click
+   **New Application**.
+2. Open **Bot**, click **Reset Token**, and copy the token into `DISCORD_BOT_TOKEN` in `.env`.
+   Leave all three **Privileged Gateway Intents** switched off (see [Discord](#discord)).
+3. Optional, to use the bot in DMs and every server without inviting it to each one: open
+   **Installation** and tick **User Install** next to **Guild Install**.
+4. Build the invite link from [Invite URL and permissions](#invite-url-and-permissions) and open
+   it.
+5. While testing, set `DISCORD_DEV_GUILD_ID` to your test server's ID (Developer Mode → right-click
+   the server → Copy Server ID). The slash commands then appear there instantly. Leave it empty in
+   production: global commands can take up to an hour to show up the first time.
 
 **Telegram**
 1. Open a chat with [@BotFather](https://t.me/BotFather) and send `/newbot`.
@@ -148,17 +206,6 @@ uv run plan-bot console --at 2026-10-12T07:45   # pretend it is a Monday morning
 3. Copy the token BotFather replies with (`123456789:AA...`) into `TELEGRAM_BOT_TOKEN` in `.env`.
 4. Optional: to use the bot in a group, add it to the group. Commands like `/today@YourBot` work
    with privacy mode on, so no extra settings are needed.
-
-**Discord**
-1. Go to the [Discord Developer Portal](https://discord.com/developers/applications) and click
-   **New Application**.
-2. Open **Bot**, click **Reset Token**, and copy the token into `DISCORD_BOT_TOKEN` in `.env`.
-   No privileged gateway intents are needed.
-3. Open **OAuth2 → URL Generator**, tick the scopes `bot` and `applications.commands`, then the
-   bot permissions *Send Messages* and *View Channels*. Open the generated URL to invite the bot to
-   your server.
-4. Optional: set `DISCORD_GUILD_ID` to your server's ID (Developer Mode → right-click the server
-   → Copy Server ID). Slash commands then appear instantly instead of after the global sync.
 
 Set only one of the tokens to run on just that platform. Discord needs the optional extra
 (`uv sync --extra discord`, or `pip install 'plan-bot[discord]'`).
@@ -197,6 +244,91 @@ calendar*, *iCal*, *ICS*, *subscribe* or *add to Google/Outlook calendar*, and c
 - If your university offers no export, plan-bot can't help. It deliberately does not log in to
   portals or scrape pages.
 
+## Discord
+
+### What you get
+
+- **Slash commands** with Polish and English descriptions (`pl`, `en-US`, `en-GB`; other
+  locales see English): `/help`, `/demo`, `/subscribe`, `/next`, `/today`, `/tomorrow`, `/week`,
+  `/remind set|list|off`, `/lang`, `/forget`, plus `/groups`, `/filter`, `/changes`, `/summary`,
+  `/refresh` and `/status`. They work in servers and in DMs.
+- **Embeds** with the subject, time range, room, teacher and a live countdown ("starts in 25
+  minutes", Discord renders it in the reader's language), a green card for a class in progress,
+  strike-through for cancelled classes.
+- **Buttons** under every answer (Next class, Today, Tomorrow, Week, Next week; reminder presets
+  after `/demo` and `/subscribe`) that mirror the Telegram keyboard. They carry no state, so they
+  keep working after a restart.
+- **Plain questions** in a DM, or after mentioning the bot in a server: "kiedy mam następne
+  zajęcia?", "co mam jutro", "plan na tydzień", "what's next", "remind me 30 min before",
+  "po polsku". Matching is a keyword table (Polish and English, diacritics ignored, one typo
+  tolerated), not a model. Text it does not understand gets a short list of what the bot can do.
+  Deleting your data by free text asks for a button confirmation first.
+- **Language** follows `interaction.locale` on first contact (Polish clients get Polish);
+  `/lang en|pl` overrides it.
+
+### Whose timetable? (a design decision)
+
+A timetable belongs to the **user**, not to the channel: every Discord user has their own feed,
+filter and reminders, and the answer to a slash command is **ephemeral** (only the person who
+asked sees it) everywhere except the user's own DM with the bot, including group DMs and other
+people's DMs where a user-installed command runs. A shared channel timetable (one feed for the whole group) is not
+supported on purpose: it would need permission rules (who may change it?), and the common use
+case, "my plan", works per user.
+
+Rows created by an earlier version were keyed by channel id. A row keyed by a user's DM channel
+is moved to that user the first time they talk to the bot in that DM (if the user already set
+things up again, the old row is dropped so nothing arrives twice). A row keyed by a server
+channel is shared, so it stays: it is still delivered to that channel and is removed
+automatically once the bot can no longer post there (channel deleted, bot removed or its
+permission revoked).
+
+Consequences:
+
+- Reminders, change alerts and the weekly summary arrive as **direct messages**. If a user closed
+  their DMs (or the bot can no longer reach them), the bot **switches that user's pushes off**
+  (reminders, change alerts, summary) and keeps the timetable, so slash commands keep working.
+  `/remind set` turns reminders on again after the user allows DMs.
+- If the target no longer exists (a deleted legacy channel, a deleted account, an uninvited bot),
+  its data is deleted instead of being retried forever.
+- A **mention in a server** cannot get an ephemeral answer (Discord only has those for
+  interactions), so the channel sees a short note and the answer, which is personal, goes to the
+  author **by DM**. If their DMs are closed, the note points to the slash commands instead.
+  Help and the "I did not get that" hint are not personal and are answered in the channel.
+- `/subscribe` without a link opens a form; with a link the answer is ephemeral, and so is the
+  "used /subscribe" line that shows the option, so nobody else sees the link either way. A link
+  **posted as a message** after a mention is public, so the bot suggests deleting it.
+
+### Intents
+
+Only non-privileged intents are requested: `guilds`, `guild_messages` and `dm_messages`. Slash
+commands, buttons and forms need no intent at all. The privileged **Message Content** intent is
+**not** required: per the [discord.py documentation][intents] (and Discord's), message content is
+delivered without it for messages sent in DMs to the bot and for messages that mention the bot,
+which are exactly the two cases the bot reads. Ordinary server chatter has an empty body, and the
+bot ignores it. Leave all three privileged intents (Presence, Server Members, Message Content)
+switched off in the Developer Portal.
+
+[intents]: https://discordpy.readthedocs.io/en/stable/api.html#discord.Intents.message_content
+
+### Invite URL and permissions
+
+The public demo's application ID is `1559599102084521994`. To run your own copy, replace it with
+the *Application ID* from your Developer Portal (General Information):
+
+```text
+Server install (slash commands + mentions):
+https://discord.com/oauth2/authorize?client_id=1559599102084521994&scope=bot+applications.commands&permissions=84992
+
+User install (DMs and every server, no invite per server; needs "User Install" enabled):
+https://discord.com/oauth2/authorize?client_id=1559599102084521994&integration_type=1&scope=applications.commands
+```
+
+`permissions=84992` is the sum of the four bits the bot needs for mentions: **View Channels**
+(1024), **Send Messages** (2048), **Embed Links** (16384) and **Read Message History** (65536;
+needed to reply to a message). Slash commands, buttons and DM reminders need no channel
+permission at all, so a server admin can also invite the bot with `permissions=0` and use only
+slash commands. The bot never asks for Administrator, Manage \* or Read Message Content.
+
 ## Commands
 
 | Command | What it does |
@@ -210,7 +342,7 @@ calendar*, *iCal*, *ICS*, *subscribe* or *add to Google/Outlook calendar*, and c
 | `/week`, `/week next` | Weekly plan |
 | `/groups` | Groups found in the feed (`CATEGORIES`) and the active filter |
 | `/filter L1,C2` / `/filter off` | Show only your groups. Classes without a group are always shown |
-| `/remind 15` / `/remind off` | Reminder N minutes before each class (default 15) |
+| `/remind 15` / `/remind off` | Reminder N minutes before each class (default 15). On Discord: `/remind set`, `/remind list`, `/remind off` |
 | `/changes on\|off` | Change alerts (default on) |
 | `/summary on\|off` | Weekly summary on Sunday at 18:00 (default on) |
 | `/refresh` | Download the feed now and show what changed |
@@ -218,11 +350,14 @@ calendar*, *iCal*, *ICS*, *subscribe* or *add to Google/Outlook calendar*, and c
 | `/forget` | Delete everything stored for this chat |
 
 Telegram shows these as a command menu (in Polish for Polish clients) and as inline buttons
-under replies, so most of the bot can be used without typing.
+under replies, Discord as localised slash commands with embeds and buttons, so most of the bot
+can be used without typing. `/start` exists on Telegram only; on Discord use `/help`.
 
 ## Configuration
 
-All settings are environment variables. See [`.env.example`](.env.example) and
+All settings are environment variables (`DISCORD_BOT_TOKEN`, `TELEGRAM_BOT_TOKEN`,
+`DISCORD_DEV_GUILD_ID` for instant slash command sync while testing; the older name
+`DISCORD_GUILD_ID` still works). See [`.env.example`](.env.example) and
 [`deploy/termux/env.example`](deploy/termux/env.example) for the full list: timezone
 (`Europe/Warsaw` by default), refresh interval, reminder tick, look-ahead window, change-alert
 horizon, summary day and hour, download size limit and timeout, feed cache, per-chat rate limit,
@@ -243,6 +378,8 @@ log format (`text` or `json`) and the health endpoint (`PLAN_BOT_HEALTH_PORT`,
   instants while class times are expanded in the feed's local wall-clock time, so they stay right
   across DST switches.
 - **Blocked bot.** When Telegram reports that a user blocked the bot, that chat's data is deleted.
+  On Discord a user who closed their DMs keeps the timetable but loses pushes; a deleted channel
+  or account has its data deleted (see [Discord](#discord)).
 - **Logs.** `PLAN_BOT_LOG_FORMAT=json` writes one JSON object per line. Chat ids are logged as a
   short keyed hash (HMAC with a key derived from the bot token, so it cannot be reversed by
   hashing every possible id) and anything that looks like a bot token is redacted.
@@ -255,13 +392,13 @@ log format (`text` or `json`) and the health endpoint (`PLAN_BOT_HEALTH_PORT`,
 [`deploy/termux/`](deploy/termux) runs the bot as a plain process on a self-hosted server running
 Termux (no Docker).
 Everything is configured through environment variables; the bot only makes outgoing connections
-(Telegram long polling), so no port has to be opened.
+(the Discord gateway, Telegram long polling), so no port has to be opened.
 
 ```bash
 pkg install git
 git clone https://github.com/MaciejZiel/plan-bot.git && cd plan-bot
-bash deploy/termux/install.sh         # WITH_DISCORD=1 to add Discord support
-nano ~/.config/plan-bot/env           # paste TELEGRAM_BOT_TOKEN (from @BotFather)
+bash deploy/termux/install.sh         # installs with Discord support (WITH_DISCORD=0 to skip)
+nano ~/.config/plan-bot/env           # paste DISCORD_BOT_TOKEN (and/or TELEGRAM_BOT_TOKEN)
 ~/plan-bot/start.sh                   # runs in the foreground; Ctrl+C stops it
 ```
 
@@ -287,6 +424,8 @@ nano ~/.config/plan-bot/env           # paste TELEGRAM_BOT_TOKEN (from @BotFathe
 
 ## Privacy notes
 
+The public Discord bot has a short [privacy policy](PRIVACY.md) and [terms](TERMS.md).
+
 - An ICS link is often a **personal secret**: anyone who has it can read your timetable, and
   some links reveal your name or student ID. plan-bot stores the link in its database so it can
   refresh it. Only run the bot on infrastructure you trust, and keep the database private.
@@ -294,15 +433,24 @@ nano ~/.config/plan-bot/env           # paste TELEGRAM_BOT_TOKEN (from @BotFathe
   `https://host/…`). Logs never contain bot tokens.
 - Stored data per chat: chat ID, language, feed link, settings, the lesson snapshot and which reminders
   were sent. `/forget` deletes all of it immediately (cascading delete).
-- In a group chat, everybody in the group shares the same feed and settings.
-- Message contents are never stored. Only commands are processed. On Discord the bot uses slash
-  commands and needs no message-content intent.
+- On Telegram, in a group chat everybody in the group shares the same feed and settings. On
+  Discord every user has their own, answers to slash commands are only visible to the asker, and
+  answers to a mention in a server are sent by DM.
+- Message contents are never stored. Only commands and, on Discord, DMs and mentions addressed to
+  the bot are processed, and the text is used only to pick a command. The bot needs no
+  message-content intent.
+- A feed link posted as a normal message in a server is visible to the channel: use `/subscribe`
+  (private answer) or a DM with the bot.
 
 ## Key decisions
 
-- **One core, thin adapters.** `BotService` returns plain text and pushes notifications through a
-  `Notifier` protocol. Adding a platform means writing one adapter, and the console mode is just
-  another adapter.
+- **One core, thin adapters.** `BotService` returns structured views (rendered to plain text by
+  default, to embeds by the Discord adapter) and pushes notifications through a `Notifier`
+  protocol. Adding a platform means writing one adapter, and the console mode is just another
+  adapter.
+- **Free text without a model.** `intent.py` normalises a message (lower case, no diacritics) and
+  matches keyword stems with a one-typo tolerance. It is deterministic, free, runs offline and is
+  covered by a PL/EN table test.
 - **Own Telegram client instead of a framework.** python-telegram-bot is LGPL-3.0, and aiogram
   depends on certifi (MPL-2.0). The project only accepts permissive licenses, and the bot needs
   just four Bot API methods, so it uses a small client (about 150 lines including the
@@ -345,7 +493,7 @@ uv run pytest --cov               # fails under 85 % coverage
 uv run python scripts/render_demo_chats.py docs/screenshots   # regenerate the demo mock-ups
 ```
 
-The suite has **220 tests** with **98% line coverage** (CI fails below 85%) and runs in about
+The suite has **390 tests** with **98% line coverage** (CI fails below 85%) and runs in about
 ten seconds. All tests use fictional fixtures (`tests/fixtures/*.ics` and the bundled sample).
 They cover:
 
@@ -355,7 +503,10 @@ They cover:
   UTC and floating times
 - a feed before and after edits
 - a fake Telegram Bot API server (commands, inline-button callbacks, concurrent chats, blocked
-  users) and the Discord slash-command callbacks
+  users)
+- the Discord adapter against fakes of interactions, messages and channels (slash commands and
+  their localisation, embeds, buttons, DMs and mentions, closed DMs, deleted channels) and a
+  Polish/English table test of the free-text matcher
 - races: per-chat ordering under random delays, one busy chat versus the shared slots, and
   background jobs meeting `/forget` or a feed switch half-way
 - hostile feeds (sub-daily and impossible rules, too many lessons) and SSRF address forms
@@ -364,8 +515,14 @@ They cover:
 
 ## Limitations
 
-- Replies exist in English and Polish only. Discord commands are described in English and have
-  no inline buttons (only Telegram does).
+- Replies exist in English and Polish only. Discord slash commands are described in Polish and
+  English; clients in other languages see English.
+- Discord timetables are per user (no shared channel feed), and DMs from the bot must be allowed
+  for reminders to arrive.
+- Free-text understanding is a keyword table for Polish and English, not a language model: it
+  handles the common phrasings and a typo, and falls back to a help message otherwise.
+- The Discord adapter has been tested against fakes of the discord.py objects, not yet against the
+  live Discord API.
 - All-day events are ignored, because they are usually holidays rather than classes.
 - Group filtering relies on `CATEGORIES` or group names appearing in the title or description.
   Feeds that encode groups some other way may need `/filter off`.
