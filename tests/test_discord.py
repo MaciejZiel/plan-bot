@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, replace
 from datetime import date, timedelta
 from types import SimpleNamespace
@@ -29,7 +30,7 @@ from plan_bot.repository import ChatRef, Repository
 from plan_bot.service import BotService, ChatUnavailable, NotificationsBlocked
 from plan_bot.timetable import NextClass
 from plan_bot.views import DayView, NextView, ReminderView, WeekView
-from tests.conftest import FakeClock, RecordingNotifier, warsaw
+from tests.conftest import FakeClock, RecordingNotifier, fixture_bytes, warsaw
 
 USER = 4242
 ME = 999
@@ -126,12 +127,27 @@ class FakeMessage:
 class FakeRouter:
     def __init__(self, reply: Reply | None = None) -> None:
         self.canned = reply or Reply("ok", lang="en")
+        self.uploaded = b""
         self.calls: list[tuple[ChatRef, str, str | None, str | None]] = []
 
     async def reply(
         self, chat: ChatRef, name: str, arg: str | None = None, *, locale: str | None = None
     ) -> Reply:
         self.calls.append((chat, name, arg, locale))
+        return self.canned
+
+    async def upload(
+        self,
+        chat: ChatRef,
+        filename: str,
+        content_type: str | None,
+        size: int,
+        read: Callable[[], Awaitable[bytes]],
+        *,
+        locale: str | None = None,
+    ) -> Reply:
+        self.calls.append((chat, "upload", filename, locale))
+        self.uploaded = await read()
         return self.canned
 
     async def adopt_chat(self, old: ChatRef, new: ChatRef) -> bool:
@@ -216,7 +232,10 @@ async def test_command_tree_has_every_command_with_options(adapter: DiscordAdapt
     assert {c.name for c in remind.commands} == {"set", "list", "off"}
     subscribe = commands["subscribe"]
     assert isinstance(subscribe, app_commands.Command)
-    assert [(p.display_name, p.required) for p in subscribe.parameters] == [("url", False)]
+    assert [(p.display_name, p.required) for p in subscribe.parameters] == [
+        ("url", False),
+        ("file", False),
+    ]
     week = commands["week"]
     assert isinstance(week, app_commands.Command)
     assert [c.value for c in week.parameters[0].choices] == ["this", "next"]
@@ -399,6 +418,76 @@ async def test_subscribe_with_a_link_answers_privately(adapter: DiscordAdapter) 
     assert "Timetable saved" in texts(saved["embeds"])
     dm = await slash(adapter, "subscribe", "demo", guild_id=None, user_id=5)
     assert len(dm.followup.sent) == 1
+
+
+class FakeAttachment:
+    def __init__(
+        self,
+        data: bytes,
+        *,
+        filename: str = "plan.ics",
+        content_type: str | None = "text/calendar",
+        size: int | None = None,
+        fail: bool = False,
+    ) -> None:
+        self.data = data
+        self.filename = filename
+        self.content_type = content_type
+        self.size = len(data) if size is None else size
+        self.fail = fail
+
+    async def read(self) -> bytes:
+        if self.fail:
+            raise not_found()
+        return self.data
+
+
+async def test_subscribe_with_a_file_stores_it_and_answers_privately(
+    adapter: DiscordAdapter, repo: Repository
+) -> None:
+    data = fixture_bytes("edits_before.ics")
+    server = await slash(adapter, "subscribe", None, FakeAttachment(data))
+    assert server.response.deferred == {"thinking": True, "ephemeral": True}
+    (saved,) = server.followup.sent
+    assert saved["ephemeral"] is True
+    assert "Timetable saved (uploaded file)" in texts(saved["embeds"])
+    sub = await repo.get(user_chat(USER))
+    assert sub is not None
+    assert sub.ics_url == "upload"
+
+    dm = await slash(adapter, "subscribe", None, FakeAttachment(data), guild_id=None, user_id=5)
+    assert len(dm.followup.sent) == 1
+
+
+async def test_a_file_and_a_link_together_are_refused(adapter: DiscordAdapter) -> None:
+    interaction = await slash(adapter, "subscribe", "demo", FakeAttachment(b"x"))
+    (sent,) = interaction.followup.sent
+    assert "either a link or a file" in texts(sent["embeds"])
+
+
+@pytest.mark.parametrize(
+    ("attachment", "expected"),
+    [
+        (FakeAttachment(b"x", size=50_000_000), "too large"),
+        (FakeAttachment(b"x", filename="plan.pdf", content_type="application/pdf"), "calendar"),
+        (FakeAttachment(b"x", fail=True), "Could not read"),
+    ],
+)
+async def test_bad_attachments_get_a_private_explanation(
+    adapter: DiscordAdapter, attachment: FakeAttachment, expected: str
+) -> None:
+    interaction = await slash(adapter, "subscribe", None, attachment)
+    (sent,) = interaction.followup.sent
+    assert expected in texts(sent["embeds"])
+    assert sent["ephemeral"] is True
+
+
+async def test_the_router_receives_the_attachment_and_locale(service: BotService) -> None:
+    fake = FakeRouter()
+    bot = DiscordAdapter(fake, "not-a-real-token")  # type: ignore[arg-type]
+    await slash(bot, "subscribe", None, FakeAttachment(b"BEGIN"), locale="pl")
+    assert fake.calls == [(user_chat(USER), "upload", "plan.ics", "pl")]
+    assert fake.uploaded == b"BEGIN"
 
 
 async def test_rate_limited_users_get_one_warning_then_silence(

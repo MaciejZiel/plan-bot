@@ -221,7 +221,8 @@ async def test_forget_deletes_the_uploaded_data_for_that_chat_only(
     await upload(service, AFTER, chat=OTHER)
     sub = await repo.get(CHAT)
     other = await repo.get(OTHER)
-    assert sub is not None and other is not None
+    assert sub is not None
+    assert other is not None
     assert "deleted" in await service.forget(CHAT)
     assert await repo.get(CHAT) is None
     assert await repo.lessons(sub.id) == []

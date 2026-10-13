@@ -525,9 +525,13 @@ class BotService:
                 data = demo_calendar(now.astimezone(self.tz).date())
             else:
                 data = await self.fetcher.fetch(url)
+            return await self._expand(data, now, lang)
         except FetchError as exc:
             raise UserError(tr(lang, "download_failed", error=exc.localized(lang))) from exc
-        return await self._expand(data, now, lang)
+        except FeedTooComplex as exc:
+            raise UserError(tr(lang, "too_complex")) from exc
+        except IcsError as exc:
+            raise UserError(tr(lang, "not_ics", error=exc)) from exc
 
     async def _expand(
         self, data: bytes, now: datetime, lang: str, *, not_ics_key: str = "not_ics"
