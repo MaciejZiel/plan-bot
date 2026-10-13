@@ -41,6 +41,7 @@ async def build_app(
     notifier: Notifier | None = None,
     *,
     clock: Callable[[], datetime] = utc_now,
+    rate_limit: bool = True,
 ) -> AsyncIterator[App]:
     await migrate(settings.database_url)
     engine = create_engine(settings.database_url)
@@ -55,7 +56,11 @@ async def build_app(
             Repository(session_factory(engine)), fetcher, settings, clock=clock, notifier=notifier
         )
         scheduler = Scheduler(service, tick_seconds=settings.tick_seconds, clock=clock)
-        limiter = RateLimiter(burst=settings.rate_burst, per_minute=settings.rate_per_minute)
+        limiter = (
+            RateLimiter(burst=settings.rate_burst, per_minute=settings.rate_per_minute)
+            if rate_limit
+            else None
+        )
         yield App(service, CommandRouter(service, limiter=limiter), scheduler, engine)
     finally:
         await fetcher.close()

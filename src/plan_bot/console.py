@@ -33,7 +33,7 @@ async def run_console(
     stdout: TextIO = sys.stdout,
 ) -> None:
     clock = shifted_clock(start_at)
-    async with build_app(settings, ConsoleNotifier(stdout), clock=clock) as app:
+    async with build_app(settings, ConsoleNotifier(stdout), clock=clock, rate_limit=False) as app:
         stop = asyncio.Event()
         scheduler = asyncio.create_task(app.scheduler.run(stop))
         stdout.write(f"{intro_text()}\nType /help for commands, Ctrl+D to quit.\n> ")
@@ -47,7 +47,7 @@ async def run_console(
                     stdout.write("> ")
                     continue
                 reply = await app.router.handle_text(CONSOLE_CHAT, line)
-                stdout.write((reply or "Commands start with '/'. Try /help") + "\n> ")
+                stdout.write(("Commands start with '/'. Try /help" if reply is None else reply) + "\n> ")
                 stdout.flush()
         finally:
             stop.set()
