@@ -431,7 +431,12 @@ class BotService:
     def _filter(sub: Subscription) -> GroupFilter:
         return GroupFilter.parse(sub.group_filter)
 
-    def _chat_tag(self, sub: Subscription) -> str:
+    async def chat_gone(self, chat: ChatRef) -> None:
+        """The user blocked the bot or left: stop working for nobody and drop their data."""
+        log.info("chat unavailable, deleting its data", extra={"chat": self._chat_tag(chat)})
+        await self.repo.delete(chat)
+
+    def _chat_tag(self, sub: Subscription | ChatRef) -> str:
         """Short stable pseudonym for logs, so chat ids are not written to disk."""
         message = f"{sub.platform}:{sub.chat_id}".encode()
         return hmac.new(self._log_key, message, hashlib.sha256).hexdigest()[:12]
@@ -442,9 +447,7 @@ class BotService:
         try:
             await self.notifier.send(chat, text)
         except ChatUnavailable:
-            # The user blocked the bot or left: stop working for nobody and drop their data.
-            log.info("chat unavailable, deleting its data", extra={"chat": self._chat_tag(sub)})
-            await self.repo.delete(chat)
+            await self.chat_gone(chat)
             return False
         except Exception:  # one broken chat must not stop the job for everybody
             log.exception("failed to deliver a message", extra={"chat": self._chat_tag(sub)})

@@ -333,3 +333,20 @@ async def test_per_chat_order_holds_under_random_delays(
     for numbers in seen.values():
         assert numbers == sorted(numbers)
     assert adapter._chat_locks == {}
+
+
+async def test_reply_to_a_blocked_chat_deletes_its_data(
+    bot_api: tuple[FakeBotApi, TelegramApi], service: BotService
+) -> None:
+    fake, api = bot_api
+    adapter = TelegramAdapter(api, CommandRouter(service))
+    chat = ChatRef("telegram", "555")
+    await service.set_feed(chat, "demo")
+    fake.fail_next["sendMessage"] = {
+        "ok": False,
+        "error_code": 403,
+        "description": "Forbidden: bot was blocked by the user",
+    }
+    await adapter.handle_update(message(1, "/next"))
+    assert not await service.has_feed(chat)
+    assert await service.repo.get(chat) is None

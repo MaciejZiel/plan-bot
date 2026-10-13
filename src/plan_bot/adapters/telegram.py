@@ -204,7 +204,10 @@ class TelegramAdapter:
         assert parsed is not None
         reply = await self.router.reply(chat, *parsed, locale=locale)
         if reply.text:
-            await self.send(chat, reply.text, reply)
+            try:
+                await self.send(chat, reply.text, reply)
+            except ChatUnavailable:
+                await self.router.service.chat_gone(chat)
 
     def _dispatch(self, update: dict[str, Any]) -> None:
         task = asyncio.ensure_future(self._guarded(update))
