@@ -17,6 +17,8 @@ from plan_bot.repository import ChatRef
 
 log = logging.getLogger(__name__)
 
+SHUTDOWN_GRACE_SECONDS = 10
+
 
 class Adapter(Protocol):
     platform: str
@@ -89,6 +91,9 @@ async def run_bots(
                     raise task.exception()  # type: ignore[misc]
         finally:
             stop.set()
+            # Let the scheduler and adapters finish the job in flight (a cancelled
+            # database call would leave a connection to be garbage collected).
+            await asyncio.wait(tasks, timeout=SHUTDOWN_GRACE_SECONDS)
             for task in [*tasks, stopper]:
                 task.cancel()
             await asyncio.gather(*tasks, stopper, return_exceptions=True)

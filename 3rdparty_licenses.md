@@ -13,6 +13,7 @@ Only permissive licenses are accepted (no GPL/LGPL/AGPL/MPL/EPL/SSPL/CDDL).
 | https://pypi.org/project/alembic/ | alembic 1.20.0 | MIT | https://github.com/sqlalchemy/alembic/blob/main/LICENSE |
 | https://pypi.org/project/asyncpg/ | asyncpg 0.31.0 | Apache-2.0 | https://github.com/MagicStack/asyncpg/blob/master/LICENSE |
 | https://pypi.org/project/attrs/ | attrs 26.1.0 | MIT | https://github.com/python-attrs/attrs/blob/main/LICENSE |
+| https://pypi.org/project/audioop-lts/ | audioop-lts 0.2.2 | PSF-2.0 | https://github.com/AbstractUmbra/audioop/blob/main/LICENSE |
 | https://pypi.org/project/colorama/ | colorama 0.4.6 | BSD-3-Clause | https://github.com/tartley/colorama/blob/master/LICENSE.txt |
 | https://pypi.org/project/coverage/ | coverage 7.16.1 | Apache-2.0 | https://github.com/coveragepy/coveragepy/blob/main/LICENSE.txt |
 | https://pypi.org/project/discord.py/ | discord.py 2.7.1 | MIT | https://github.com/Rapptz/discord.py/blob/master/LICENSE |
