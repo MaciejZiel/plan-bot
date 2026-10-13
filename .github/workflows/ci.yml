@@ -14,16 +14,20 @@ concurrency:
 
 jobs:
   test:
-    name: lint, types, tests
+    name: lint, types, tests (Python ${{ matrix.python }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.12", "3.14"]
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.2.0
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python }}
           enable-cache: true
       - name: Install
-        run: uv sync --locked
+        run: uv sync --locked --all-extras
       - name: Ruff
         run: |
           uv run ruff check .

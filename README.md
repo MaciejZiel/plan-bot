@@ -1,7 +1,7 @@
 # plan-bot
 
 [![CI](https://github.com/MaciejZiel/plan-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/MaciejZiel/plan-bot/actions/workflows/ci.yml)
-![Python 3.12](https://img.shields.io/badge/python-3.12-3776ab)
+![Python 3.12 | 3.14](https://img.shields.io/badge/python-3.12%20%7C%203.14-3776ab)
 ![Coverage 98%](https://img.shields.io/badge/coverage-98%25-brightgreen)
 ![Ruff + mypy strict](https://img.shields.io/badge/lint-ruff%20%2B%20mypy%20strict-informational)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
