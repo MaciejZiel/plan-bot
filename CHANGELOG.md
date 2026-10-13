@@ -4,6 +4,27 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.2.0] - 2026-10-13
+
+### Added
+- Polish and English replies, chosen per chat (follows the Telegram app language on first contact,
+  `/lang en|pl` to change).
+- `/start` onboarding, `/demo` and `/subscribe` (the old `/setfeed` keeps working), inline
+  keyboards on Telegram, a per-language command menu.
+- The demo timetable rolls forward by whole weeks once the bundled semester has passed, so it
+  always has classes this week; it never raises change alerts.
+- Per-chat rate limiting, a shared feed cache and a download concurrency cap.
+- Structured JSON logging, token redaction, a `/healthz` endpoint and graceful shutdown.
+- `deploy/termux/` for self-hosting on Android; Python 3.14 support.
+
+### Changed
+- SSRF protection now happens in the connector, on the address that is actually used; links with
+  credentials, control characters or more than 2048 characters are rejected.
+- Telegram updates are processed concurrently (ordered per chat), so one slow feed cannot block
+  other users.
+- `discord.py` is an optional extra (`pip install 'plan-bot[discord]'`).
+- Chats that blocked the bot are deleted instead of being retried forever.
+
 ## [0.1.0] - 2026-10-10
 
 First release.
