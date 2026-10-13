@@ -66,13 +66,13 @@ async def run_bots(
 
     notifier = MultiNotifier()
     async with build_app(settings, notifier) as app, session_factory() as http:
-        runners: list[Awaitable[None]] = [app.scheduler.run(stop)]
+        runners: list[Callable[[], Awaitable[None]]] = []
         if settings.telegram_token:
             from plan_bot.adapters.telegram import TelegramAdapter, TelegramApi
 
             telegram = TelegramAdapter(TelegramApi(settings.telegram_token, http), app.router)
             notifier.register(telegram)
-            runners.append(telegram.run(stop))
+            runners.append(lambda: telegram.run(stop))
         if settings.discord_token:
             try:
                 from plan_bot.adapters.discord import DiscordAdapter
@@ -86,9 +86,24 @@ async def run_bots(
                 app.router, settings.discord_token, guild_id=settings.discord_guild_id
             )
             notifier.register(discord_bot)
-            runners.append(discord_bot.run(stop))
-        log.info("plan-bot running with: %s", ", ".join(notifier.adapters))
-        tasks = [asyncio.ensure_future(r) for r in runners]
+            runners.append(lambda: discord_bot.run(stop))
+        if settings.health_port:
+            from plan_bot.health import HealthServer
+
+            health = HealthServer(
+                app.engine,
+                host=settings.health_host,
+                port=settings.health_port,
+                base_path=settings.base_path,
+                tick_seconds=settings.tick_seconds,
+                scheduler_last_tick=lambda: app.scheduler.last_tick_at,
+                adapters=lambda: sorted(notifier.adapters),
+            )
+            runners.append(lambda: health.run(stop))
+        runners.insert(0, lambda: app.scheduler.run(stop))
+        log.info("plan-bot running", extra={"adapters": ",".join(notifier.adapters)})
+        # Coroutines are only created now, so an error while wiring leaks none of them.
+        tasks = [asyncio.ensure_future(start()) for start in runners]
         stopper = asyncio.ensure_future(stop.wait())
         try:
             done, _ = await asyncio.wait([*tasks, stopper], return_when=asyncio.FIRST_COMPLETED)

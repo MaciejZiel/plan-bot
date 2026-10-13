@@ -29,6 +29,9 @@ class Scheduler:
         self.tick_seconds = tick_seconds
         self.clock = clock
         self._ticks = 0
+        #: Set after every completed tick; the health endpoint watches it.
+        self.last_tick_at: datetime | None = None
+        self.last_tick_ok = True
 
     async def tick(self) -> None:
         now = self.clock()
@@ -41,14 +44,18 @@ class Scheduler:
         if self._ticks % 120 == 0:
             jobs.append(("prune", self.service.prune))
         self._ticks += 1
+        ok = True
         for name, job in jobs:
             try:
                 count = await job(now)
             except Exception:
-                log.exception("scheduled job %s failed", name)
+                ok = False
+                log.exception("scheduled job %s failed", name, extra={"job": name})
             else:
                 if count:
-                    log.info("job %s: %d item(s)", name, count)
+                    log.info("scheduled job done", extra={"job": name, "items": count})
+        self.last_tick_ok = ok
+        self.last_tick_at = utc_now()
 
     async def run(self, stop: asyncio.Event | None = None) -> None:
         stop = stop or asyncio.Event()
