@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import time
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from plan_bot.domain import Lesson
-from plan_bot.ics import DEFAULT_DURATION, Window, expand
+from plan_bot.ics import DEFAULT_DURATION, IcsError, Window, expand
 from tests.conftest import WARSAW, fixture_bytes, warsaw
 
 LESSONS = expand(
@@ -70,3 +73,50 @@ def test_window_edges_in_other_timezones() -> None:
     )
     (lesson,) = expand(fixture_bytes("rrule_edges.ics"), window, WARSAW)
     assert lesson.start == warsaw(2026, 11, 10, 10)
+
+
+def _calendar(rule: str, start: str, events: int = 1) -> bytes:
+    body = "".join(
+        f"BEGIN:VEVENT\r\nUID:hostile-{i}\r\nDTSTART;TZID=Europe/Warsaw:{start}\r\n"
+        f"DURATION:PT1H\r\nRRULE:{rule}\r\nSUMMARY:x\r\nEND:VEVENT\r\n"
+        for i in range(events)
+    )
+    return (
+        f"BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//t//t//EN\r\n{body}END:VCALENDAR\r\n".encode()
+    )
+
+
+HOSTILE_WINDOW = Window(warsaw(2026, 10, 5), warsaw(2027, 3, 1))
+
+
+@pytest.mark.parametrize("freq", ["HOURLY", "MINUTELY", "SECONDLY"])
+def test_sub_daily_rules_are_ignored(freq: str) -> None:
+    # FREQ=MINUTELY since 2000 used to block the event loop for tens of seconds.
+    lessons = expand(_calendar(f"FREQ={freq}", "20000103T080000"), HOSTILE_WINDOW, WARSAW)
+    assert lessons == []
+
+
+def test_rule_steps_before_the_window_are_bounded() -> None:
+    minutes = ",".join(str(m) for m in range(60))
+    hours = ",".join(str(h) for h in range(24))
+    rule = f"FREQ=DAILY;BYHOUR={hours};BYMINUTE={minutes}"
+    started = time.monotonic()
+    assert expand(_calendar(rule, "20000103T080000"), HOSTILE_WINDOW, WARSAW) == []
+    assert time.monotonic() - started < 5
+
+
+def test_long_running_daily_series_still_expands() -> None:
+    lessons = expand(_calendar("FREQ=DAILY", "19900101T080000"), HOSTILE_WINDOW, WARSAW)
+    assert len(lessons) == (HOSTILE_WINDOW.end - HOSTILE_WINDOW.start).days
+
+
+def test_too_many_lessons_are_refused() -> None:
+    with pytest.raises(IcsError, match="more than"):
+        expand(_calendar("FREQ=DAILY", "20261005T080000", events=200), HOSTILE_WINDOW, WARSAW)
+
+
+def test_expansion_has_a_time_budget() -> None:
+    # Impossible rules make dateutil scan up to the year 9999 without yielding.
+    data = _calendar("FREQ=DAILY;BYMONTH=2;BYMONTHDAY=31", "20260105T080000", events=5)
+    with pytest.raises(IcsError, match="too complex"):
+        expand(data, HOSTILE_WINDOW, WARSAW, seconds=0.5)

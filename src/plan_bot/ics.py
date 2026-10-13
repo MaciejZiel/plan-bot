@@ -10,6 +10,7 @@ which timezone the feed uses to spell them.
 from __future__ import annotations
 
 import logging
+import time as clock
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, time, timedelta, tzinfo
@@ -25,11 +26,32 @@ log = logging.getLogger(__name__)
 
 #: Hard cap on generated occurrences per series, as a guard against hostile feeds.
 MAX_OCCURRENCES_PER_EVENT = 2000
+#: Occurrences a rule may generate in total, including those before the window:
+#: a daily class since 1990 needs ~13k, ``FREQ=DAILY;BYMINUTE=...`` since 2000 would
+#: need millions.
+MAX_RULE_STEPS = 50_000
+#: Lessons one feed may produce inside the window (a busy timetable has a few hundred).
+MAX_LESSONS = 20_000
+#: Wall-clock budget for expanding one feed.
+EXPAND_SECONDS = 10.0
+#: Classes do not repeat by the hour, minute or second; such rules are hostile or broken.
+SUB_DAILY = frozenset({"HOURLY", "MINUTELY", "SECONDLY"})
 DEFAULT_DURATION = timedelta(minutes=90)
 
 
 class IcsError(ValueError):
     """The document is not a usable iCalendar feed."""
+
+
+class _Budget:
+    """Aborts the expansion of a feed that is too big or too slow to expand."""
+
+    def __init__(self, seconds: float) -> None:
+        self.deadline = clock.monotonic() + seconds
+
+    def check(self) -> None:
+        if clock.monotonic() > self.deadline:
+            raise IcsError("the feed is too complex to expand")
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,9 +75,17 @@ def parse_calendar(data: bytes | str) -> Calendar:
     return cal
 
 
-def expand(data: bytes | str, window: Window, default_tz: tzinfo) -> list[Lesson]:
-    """Parse ``data`` and return every lesson starting inside ``window``, sorted."""
+def expand(
+    data: bytes | str, window: Window, default_tz: tzinfo, *, seconds: float = EXPAND_SECONDS
+) -> list[Lesson]:
+    """Parse ``data`` and return every lesson starting inside ``window``, sorted.
+
+    Raises :class:`IcsError` when the feed yields more than :data:`MAX_LESSONS`
+    lessons or takes longer than ``seconds`` to expand.
+    """
+    budget = _Budget(seconds)
     cal = parse_calendar(data)
+    budget.check()
     masters: dict[str, Component] = {}
     overrides: dict[str, list[Component]] = {}
     singles: list[Component] = []
@@ -78,7 +108,11 @@ def expand(data: bytes | str, window: Window, default_tz: tzinfo) -> list[Lesson
             lessons.append(lesson)
 
     for uid, master in masters.items():
-        lessons.extend(_expand_series(uid, master, overrides.pop(uid, []), window, default_tz))
+        budget.check()
+        series = _expand_series(uid, master, overrides.pop(uid, []), window, default_tz, budget)
+        lessons.extend(series)
+        if len(lessons) > MAX_LESSONS:
+            raise IcsError(f"the feed has more than {MAX_LESSONS} classes in the next months")
 
     # Overrides whose master is missing (or was not recurring) still describe a class.
     for uid, orphans in overrides.items():
@@ -90,6 +124,8 @@ def expand(data: bytes | str, window: Window, default_tz: tzinfo) -> list[Lesson
             if lesson is not None and window.contains(lesson.start):
                 lessons.append(lesson)
 
+    if len(lessons) > MAX_LESSONS:
+        raise IcsError(f"the feed has more than {MAX_LESSONS} classes in the next months")
     lessons.sort(key=lambda les: (les.start, les.summary, les.key))
     return _unique_keys(lessons)
 
@@ -111,6 +147,7 @@ def _expand_series(
     overrides: list[Component],
     window: Window,
     default_tz: tzinfo,
+    budget: _Budget,
 ) -> Iterator[Lesson]:
     dtstart = _aware(master.decoded("DTSTART"), default_tz)
     if dtstart is None:  # all-day series are not classes
@@ -126,7 +163,7 @@ def _expand_series(
             by_rid[rid.astimezone(UTC)] = event
 
     excluded = {d.astimezone(UTC) for d in _date_list(master, "EXDATE", tz)}
-    starts = set(_rrule_starts(master, dtstart, window, duration))
+    starts = set(_rrule_starts(master, dtstart, window, duration, budget))
     starts.update(d for d in _date_list(master, "RDATE", tz))
     starts.add(dtstart)
 
@@ -157,7 +194,7 @@ def _expand_series(
 
 
 def _rrule_starts(
-    master: Component, dtstart: datetime, window: Window, duration: timedelta
+    master: Component, dtstart: datetime, window: Window, duration: timedelta, budget: _Budget
 ) -> Iterator[datetime]:
     rules = master.get("RRULE")
     if rules is None:
@@ -172,14 +209,28 @@ def _rrule_starts(
     hi = window.end.astimezone(tz).replace(tzinfo=None)
     for rule in rules:
         try:
+            sub_daily = SUB_DAILY.intersection(str(f).upper() for f in rule.get("FREQ", []))
             rset = rrulestr(_naive_rule(rule, tz), dtstart=naive_start, forceset=True)
         except Exception as exc:  # broken RRULE values surface as various exception types
             log.warning("ignoring unparsable RRULE in %s: %s", master.get("UID"), exc)
             continue
-        for count, occurrence in enumerate(rset.xafter(lo, inc=True)):
-            if occurrence >= hi or count >= MAX_OCCURRENCES_PER_EVENT:
+        if sub_daily:
+            log.warning("ignoring sub-daily RRULE in %s", master.get("UID"))
+            continue
+        produced = 0
+        # Iterate from DTSTART (``xafter`` would do the same internally) so that the
+        # occurrences before the window count against the step budget too.
+        for step, occurrence in enumerate(rset):
+            if occurrence >= hi or produced >= MAX_OCCURRENCES_PER_EVENT:
                 break
-            yield _localize(occurrence, tz)
+            if step >= MAX_RULE_STEPS:
+                log.warning("RRULE in %s generates too many occurrences", master.get("UID"))
+                break
+            if step % 1000 == 999:
+                budget.check()
+            if occurrence >= lo:
+                produced += 1
+                yield _localize(occurrence, tz)
 
 
 def _naive_rule(rule: vRecur, tz: tzinfo) -> str:
