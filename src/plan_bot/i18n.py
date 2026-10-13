@@ -366,18 +366,33 @@ _M: dict[str, dict[str, str]] = {
     "dc.help_title": {"en": "plan-bot: your timetable", "pl": "plan-bot: Twój plan zajęć"},
     "dc.help_ask": {
         "en": (
-            "You can also just write to me (or mention me in a server): "
-            '"what\'s next?", "today", "tomorrow", "week", "remind me 30 min before".'
+            "You can also just write to me in a DM: "
+            '"what\'s next?", "today", "tomorrow", "week", "remind me 30 min before". '
+            "Mention me in a server and the answer comes by DM."
         ),
         "pl": (
-            "Możesz też po prostu do mnie napisać (albo wspomnieć mnie na serwerze): "
+            "Możesz też po prostu napisać do mnie w DM: "
             '"kiedy mam następne zajęcia?", "co mam jutro", "plan na tydzień", '
-            '"przypomnij 30 min przed".'
+            '"przypomnij 30 min przed". Gdy wspomnisz mnie na serwerze, odpowiem w DM.'
         ),
     },
     "dc.privacy": {
         "en": "Your timetable belongs to you, not to the channel: answers are visible only to you.",
         "pl": "Plan należy do Ciebie, nie do kanału: odpowiedzi widzisz tylko Ty.",
+    },
+    "dc.answer_in_dm": {
+        "en": "I sent you the answer in a direct message, so your timetable stays private.",
+        "pl": "Odpowiedź wysłałem Ci w wiadomości prywatnej, żeby Twój plan nie był publiczny.",
+    },
+    "dc.dm_closed": {
+        "en": (
+            "I cannot send you a direct message. Use a slash command such as /next or /today "
+            "here: only you will see the answer. Or allow DMs from this server's members."
+        ),
+        "pl": (
+            "Nie mogę wysłać Ci wiadomości prywatnej. Użyj tutaj komendy, np. /next albo "
+            "/today: odpowiedź zobaczysz tylko Ty. Albo zezwól na DM od członków serwera."
+        ),
     },
     "nl.unknown": {
         "en": (

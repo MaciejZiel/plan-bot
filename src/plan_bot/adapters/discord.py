@@ -5,7 +5,13 @@ Design decisions (see README, "Discord"):
 * A timetable belongs to the *user*, not to the channel: chats are keyed
   ``user:<id>`` and reminders arrive as direct messages. Older rows keyed by a plain
   channel id keep working and are delivered to that channel.
-* Replies to slash commands in a server are ephemeral (only the caller sees them).
+* Replies to slash commands are ephemeral (only the caller sees them) everywhere except
+  in the user's own DM with the bot.
+* A mention in a server is answered with a short public note; the answer itself
+  (the user's timetable) goes to the author by DM, because a message reply cannot be
+  ephemeral.
+* Rows from before the per-user model that were keyed by the user's DM channel are
+  moved to ``user:<id>`` the first time that user talks to the bot in that DM.
 * Only non-privileged intents are used. Messages in DMs and messages that mention
   the bot carry their text without the privileged *message content* intent.
 """
@@ -72,6 +78,8 @@ _CHOICES: dict[str, list[tuple[str | locale_str, str]]] = {
     "lang": [(LANG_NAMES[code], code) for code in LANGS],
 }
 
+Rows = tuple[tuple[Button, ...], ...]
+
 #: Commands built by hand below instead of from the shared table.
 _CUSTOM = frozenset({"start", "subscribe", "remind"})
 
@@ -81,9 +89,25 @@ class Router(Protocol):
         self, chat: ChatRef, name: str, arg: str | None = None, *, locale: str | None = None
     ) -> Reply: ...
 
+    async def adopt_chat(self, old: ChatRef, new: ChatRef) -> bool: ...
+
 
 def user_chat(user_id: int) -> ChatRef:
     return ChatRef(PLATFORM, f"user:{user_id}")
+
+
+def is_private(interaction: discord.Interaction[Any]) -> bool:
+    """Whether only the caller may see the answer: everywhere but their DM with the bot.
+
+    A user-installed command can run in a server, a group DM or a DM between two other
+    people (Discord's ``private_channel`` context): all of them have other readers.
+    """
+    context = interaction.context
+    if context.guild or context.private_channel:
+        return True
+    if context.dm_channel:
+        return False
+    return interaction.guild_id is not None
 
 
 def parse_target(chat: ChatRef) -> tuple[str, int]:
@@ -213,6 +237,8 @@ class DiscordAdapter:
         intents.guild_messages = True
         intents.dm_messages = True
         self.client = PlanClient(self, intents=intents)
+        #: DM channels already checked for a row from before per-user timetables.
+        self._dm_checked: set[int] = set()
         self.tree = app_commands.CommandTree(self.client)
         self.tree.on_error = self._on_tree_error  # type: ignore[method-assign]
         self.client.add_dynamic_items(CommandButton)
@@ -328,7 +354,10 @@ class DiscordAdapter:
     ) -> None:
         log.error("discord: command failed", exc_info=error)
         lang = lang_for_locale(str(interaction.locale))
-        await self._say(interaction, [discord.Embed(description=tr(lang, "internal_error"))])
+        try:
+            await self._say(interaction, [discord.Embed(description=tr(lang, "internal_error"))])
+        except discord.HTTPException:  # the interaction expired or was already answered
+            log.debug("discord: could not report the error to the user")
 
     # ------------------------------------------------------- answering users
 
@@ -352,8 +381,10 @@ class DiscordAdapter:
         """Answer a slash command or button press from the caller's own timetable."""
         in_server = interaction.guild_id is not None
         # Downloading a feed can take longer than Discord's 3 s answer deadline.
-        await interaction.response.defer(thinking=True, ephemeral=in_server)
+        await interaction.response.defer(thinking=True, ephemeral=is_private(interaction))
         chat = user_chat(interaction.user.id)
+        if interaction.context.dm_channel and interaction.channel_id is not None:
+            await self._adopt_dm_row(interaction.channel_id, chat)
         reply = await self.router.reply(chat, name, arg, locale=str(interaction.locale))
         if not reply.text:  # rate limited and already warned
             await self._discard(interaction)
@@ -378,7 +409,7 @@ class DiscordAdapter:
         extra: list[list[discord.Embed]] | None = None,
         rows: tuple[tuple[Button, ...], ...] = (),
     ) -> None:
-        ephemeral = interaction.guild_id is not None
+        ephemeral = is_private(interaction)
         for earlier in extra or []:
             await interaction.followup.send(embeds=earlier, ephemeral=ephemeral)
         kwargs: dict[str, Any] = {"embeds": embeds, "ephemeral": ephemeral}
@@ -405,51 +436,87 @@ class DiscordAdapter:
             content = re.sub(rf"<@[!&]?{me.id}>", " ", content)
         return content.strip()
 
+    async def _adopt_dm_row(self, channel_id: int, chat: ChatRef) -> None:
+        """Move a row keyed by this DM channel (before per-user timetables) to the user."""
+        if channel_id in self._dm_checked:
+            return
+        await self.router.adopt_chat(ChatRef(PLATFORM, str(channel_id)), chat)
+        self._dm_checked.add(channel_id)
+
     async def handle_message(self, message: discord.Message) -> None:
         """Answer free text sent in a DM or addressed to the bot with a mention.
 
-        In a server the answer is visible to the channel (a message cannot be
-        ephemeral); slash commands are the private way to ask.
+        In a server a message reply cannot be ephemeral, so the channel only sees a
+        short note: the answer goes to the author by DM. If their DMs are closed the
+        note points to the slash commands, whose answers only the caller sees.
         """
         if message.author.bot:
             return
         me = self.client.user
         mentioned = me is not None and any(u.id == me.id for u in message.mentions)
-        if message.guild is not None and not mentioned:
+        in_server = message.guild is not None
+        if in_server and not mentioned:
             return
         text = self._strip_mentions(message.content) or "help"
         parsed = parse_command(text)
         intent = intent_rules.Intent(*parsed) if parsed else intent_rules.match(text)
         chat = user_chat(message.author.id)
+        if not in_server:
+            await self._adopt_dm_row(message.channel.id, chat)
 
-        async def say(embeds: list[discord.Embed], rows: tuple[tuple[Button, ...], ...]) -> None:
+        async def public(embeds: list[discord.Embed], rows: Rows = ()) -> None:
             kwargs: dict[str, Any] = {"embeds": embeds, "mention_author": False}
             view = build_view(rows)
             if view is not None:
                 kwargs["view"] = view
             await message.reply(**kwargs)
 
+        async def deliver(messages: list[tuple[list[discord.Embed], Rows]], lang: str) -> None:
+            if not in_server:
+                for embeds, rows in messages:
+                    await public(embeds, rows)
+                return
+            try:
+                for embeds, rows in messages:
+                    kwargs: dict[str, Any] = {"embeds": embeds}
+                    view = build_view(rows)
+                    if view is not None:
+                        kwargs["view"] = view
+                    await message.author.send(**kwargs)
+            except discord.Forbidden:
+                await public([discord.Embed(description=tr(lang, "dc.dm_closed"))])
+                return
+            note = tr(lang, "dc.answer_in_dm")
+            if intent is not None and intent.command == "subscribe":
+                note = f"{note}\n\n{tr(lang, 'dc.link_warning')}"
+            await public([discord.Embed(description=note)])
+
         if intent is None:
+            # Not personal: the same short list of what the bot can do for everybody.
             reply = await self.router.reply(chat, "help")
             if reply.text:
-                await say([render.unknown_embed(reply.lang)], menu_buttons(reply.lang))
+                await public([render.unknown_embed(reply.lang)], menu_buttons(reply.lang))
+            return
+        if intent.command == "help" and in_server:
+            reply = await self.router.reply(chat, "help", locale=intent.lang)
+            if reply.text:
+                await public([render.help_embed(reply.lang)], reply.buttons)
             return
         if intent.command == "forget" and not parsed:
             # Deleting data from a loosely worded sentence needs an explicit confirmation.
             reply = await self.router.reply(chat, "help", locale=intent.lang)
             if reply.text:
                 embed = discord.Embed(description=tr(reply.lang, "dc.forget_confirm"))
-                await say([embed], ((Button(tr(reply.lang, "dc.forget_yes"), "/forget"),),))
+                confirm: Rows = ((Button(tr(reply.lang, "dc.forget_yes"), "/forget"),),)
+                await deliver([([embed], confirm)], reply.lang)
             return
         reply = await self.router.reply(chat, intent.command, intent.arg, locale=intent.lang)
         if not reply.text:
             return
-        messages = self._present(reply)
-        if intent.command == "subscribe" and message.guild is not None:
-            messages.append([discord.Embed(description=tr(reply.lang, "dc.link_warning"))])
-        for earlier in messages[:-1]:
-            await say(earlier, ())
-        await say(messages[-1], reply.buttons)
+        payloads = self._present(reply)
+        messages: list[tuple[list[discord.Embed], Rows]] = [(e, ()) for e in payloads[:-1]]
+        messages.append((payloads[-1], reply.buttons))
+        await deliver(messages, reply.lang)
 
     # ----------------------------------------------------------- notifications
 

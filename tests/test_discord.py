@@ -72,9 +72,16 @@ class FakeInteraction:
         guild_id: int | None = 1,
         locale: str = "en-US",
         client: Any = None,
+        context: app_commands.AppCommandContext | None = None,
+        channel_id: int = 500,
     ) -> None:
         self.user = SimpleNamespace(id=user_id)
         self.guild_id = guild_id
+        self.channel_id = channel_id
+        if context is None:
+            in_guild = guild_id is not None
+            context = app_commands.AppCommandContext(guild=in_guild, dm_channel=not in_guild)
+        self.context = context
         self.locale = locale
         self.client = client
         self.response = FakeResponse()
@@ -94,12 +101,22 @@ class FakeMessage:
         bot: bool = False,
         in_guild: bool = False,
         mentions: tuple[int, ...] = (),
+        dms_closed: bool = False,
+        channel_id: int = 600,
     ) -> None:
         self.content = content
-        self.author = SimpleNamespace(id=author_id, bot=bot)
+        self.dms: list[dict[str, Any]] = []
+        self.dms_closed = dms_closed
+        self.author = SimpleNamespace(id=author_id, bot=bot, send=self._dm)
         self.guild = SimpleNamespace(id=1) if in_guild else None
+        self.channel = SimpleNamespace(id=channel_id)
         self.mentions = [SimpleNamespace(id=m) for m in mentions]
         self.replies: list[dict[str, Any]] = []
+
+    async def _dm(self, **kwargs: Any) -> None:
+        if self.dms_closed:
+            raise forbidden()
+        self.dms.append(kwargs)
 
     async def reply(self, **kwargs: Any) -> None:
         self.replies.append(kwargs)
@@ -115,6 +132,9 @@ class FakeRouter:
     ) -> Reply:
         self.calls.append((chat, name, arg, locale))
         return self.canned
+
+    async def adopt_chat(self, old: ChatRef, new: ChatRef) -> bool:
+        return False
 
 
 class FakeResp:
@@ -540,10 +560,75 @@ async def test_mentions_work_in_servers_without_the_message_content_intent(
     await slash(adapter, "demo")
     message = FakeMessage(f"<@{ME}> co mam jutro?", in_guild=True, mentions=(ME,))
     await adapter.handle_message(message)  # type: ignore[arg-type]
-    assert "Tomorrow" in texts(message.replies[0]["embeds"])
+    assert "Tomorrow" in texts(message.dms[0]["embeds"])
     bare = FakeMessage(f"<@!{ME}>", in_guild=True, mentions=(ME,))
     await adapter.handle_message(bare)  # type: ignore[arg-type]
     assert bare.replies[0]["embeds"][0].title == "plan-bot: your timetable"
+
+
+async def test_mentions_in_servers_never_show_the_timetable_publicly(
+    adapter: DiscordAdapter,
+) -> None:
+    await slash(adapter, "demo")
+    for text in ("what's next", "co mam dzisiaj", "plan na tydzień", "status", "przypomnienia"):
+        message = FakeMessage(f"<@{ME}> {text}", in_guild=True, mentions=(ME,))
+        await adapter.handle_message(message)  # type: ignore[arg-type]
+        (note,) = message.replies
+        public = texts(note["embeds"])
+        assert "direct message" in public
+        assert "Algorithms" not in public
+        assert "A-101" not in public
+        assert "view" not in note
+        assert message.dms, text
+
+
+async def test_mentions_with_closed_dms_point_to_slash_commands(
+    adapter: DiscordAdapter,
+) -> None:
+    await slash(adapter, "demo")
+    message = FakeMessage(f"<@{ME}> what's next", in_guild=True, mentions=(ME,), dms_closed=True)
+    await adapter.handle_message(message)  # type: ignore[arg-type]
+    (note,) = message.replies
+    public = texts(note["embeds"])
+    assert "/next" in public
+    assert "Algorithms" not in public
+    forget = FakeMessage(f"<@{ME}> delete my data", in_guild=True, mentions=(ME,))
+    await adapter.handle_message(forget)  # type: ignore[arg-type]
+    assert "Confirm?" in texts(forget.dms[0]["embeds"])
+    assert "Confirm?" not in texts(forget.replies[0]["embeds"])
+
+
+async def test_answers_are_private_outside_the_bots_own_dm(adapter: DiscordAdapter) -> None:
+    group_dm = await slash(
+        adapter,
+        "demo",
+        guild_id=None,
+        context=app_commands.AppCommandContext(private_channel=True),
+    )
+    assert group_dm.response.deferred == {"thinking": True, "ephemeral": True}
+    assert group_dm.followup.sent[0]["ephemeral"] is True
+    unknown = await slash(adapter, "help", context=app_commands.AppCommandContext())
+    assert unknown.response.deferred == {"thinking": True, "ephemeral": True}
+
+
+async def test_rows_keyed_by_a_dm_channel_move_to_the_user(
+    adapter: DiscordAdapter, repo: Repository
+) -> None:
+    await repo.update(ChatRef("discord", "777"), ics_url="demo", reminder_minutes=30)
+    await slash(adapter, "status", guild_id=None, channel_id=777)
+    assert await repo.get(ChatRef("discord", "777")) is None
+    moved = await repo.get(user_chat(USER))
+    assert moved is not None
+    assert moved.reminder_minutes == 30
+    # a channel row in a server is shared and stays where it is
+    await repo.update(ChatRef("discord", "888"), ics_url="demo")
+    await slash(adapter, "status", guild_id=5, channel_id=888)
+    assert await repo.get(ChatRef("discord", "888")) is not None
+    # free text in a DM moves it too; an existing user row wins over the old one
+    await repo.update(ChatRef("discord", "999"), ics_url="demo")
+    await adapter.handle_message(FakeMessage("status", channel_id=999))  # type: ignore[arg-type]
+    assert await repo.get(ChatRef("discord", "999")) is None
+    assert (await repo.get(user_chat(USER))) is not None
 
 
 async def test_chatter_in_servers_and_from_bots_is_ignored(adapter: DiscordAdapter) -> None:
@@ -587,8 +672,9 @@ async def test_a_link_in_a_message_subscribes_and_warns_in_servers(
 ) -> None:
     message = FakeMessage(f"<@{ME}> demo", in_guild=True, mentions=(ME,))
     await adapter.handle_message(message)  # type: ignore[arg-type]
-    assert "Timetable saved" in texts(message.replies[0]["embeds"])
-    assert len(message.replies) == 1  # "demo" is not a link: no warning
+    assert "Timetable saved" in texts(message.dms[0]["embeds"])
+    (note,) = message.replies
+    assert "visible" not in texts(note["embeds"])  # "demo" is not a link: no warning
 
     router = FakeRouter(Reply("Timetable saved.", lang="en"))
     other = DiscordAdapter(router, "x")
@@ -596,10 +682,9 @@ async def test_a_link_in_a_message_subscribes_and_warns_in_servers(
     linked = FakeMessage(f"<@{ME}> https://uni.example/a.ics", in_guild=True, mentions=(ME,))
     await other.handle_message(linked)  # type: ignore[arg-type]
     assert router.calls[0][1:3] == ("subscribe", "https://uni.example/a.ics")
-    assert len(linked.replies) == 2
-    assert "visible in the channel" in texts(linked.replies[0]["embeds"]) or "visible" in texts(
-        linked.replies[1]["embeds"]
-    )
+    assert "Timetable saved" in texts(linked.dms[0]["embeds"])
+    (note,) = linked.replies
+    assert "visible in the channel" in texts(note["embeds"])
 
 
 async def test_silent_replies_send_nothing(service: BotService) -> None:
