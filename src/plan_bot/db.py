@@ -74,6 +74,8 @@ class Subscription(Base):
     window_end: Mapped[datetime | None] = mapped_column(UTCDateTime, default=None)
     last_error: Mapped[str | None] = mapped_column(Text, default=None)
     error_count: Mapped[int] = mapped_column(Integer, default=0)
+    #: ``ics.PARSER_VERSION`` the stored lessons were parsed with (0 = before it existed).
+    parser_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=lambda: datetime.now(UTC))
 
     lessons: Mapped[list[LessonRow]] = relationship(

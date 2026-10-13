@@ -152,6 +152,7 @@ class Repository:
         refreshed_at: datetime,
         window_end: datetime,
         feed_url: str | None = None,
+        parser_version: int | None = None,
     ) -> bool:
         """Store a new snapshot; ``False`` (and nothing stored) if it is out of date.
 
@@ -168,6 +169,8 @@ class Repository:
             session.add_all(_to_row(subscription_id, les) for les in lessons)
             sub.last_refresh_at = refreshed_at
             sub.window_end = window_end
+            if parser_version is not None:
+                sub.parser_version = parser_version
             sub.last_error = None
             sub.error_count = 0
             await session.commit()

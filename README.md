@@ -279,9 +279,10 @@ which saves one `.ics` file for the whole semester), upload that file instead. O
   changed (new, moved, re-roomed and cancelled classes), the same way a link refresh does.
 - Only classes from about a week ago to `PLAN_BOT_HORIZON_DAYS` (150) ahead are kept, so re-upload
   after a long break.
-- The PJATK export writes local times with a `Z` suffix and puts the room into the title
-  (`ZPR wykład s. W21`). plan-bot reads those times as Warsaw wall-clock time (only for files
-  whose `PRODID` says `PJWSTK PLAN`) and shows the room as the location.
+- The PJATK (Gakko) export writes real UTC times with a `Z` suffix and already moves them by an
+  hour at the summer/winter change (a class at 14:00 is `12:00Z` in summer and `13:00Z` in
+  winter). plan-bot converts them to the configured timezone like any other UTC time. The export
+  also puts the room into the title (`ZPR wykład s. W21`); plan-bot shows it as the location.
 - If you already subscribe to the timetable in Google Calendar, open the calendar's
   *Settings → Integrate calendar* page. The *Secret address in iCal format* works, but read the
   privacy notes below first.
@@ -419,7 +420,7 @@ log format (`text` or `json`) and the health endpoint (`PLAN_BOT_HEALTH_PORT`,
   run at once. Feeds are refreshed in the background, so slow servers do not delay reminders.
 - **Restarts.** Chats, settings, snapshots and the "reminder already sent" markers are in the
   database, so a restart neither forgets nor repeats a reminder. Reminders are matched against UTC
-  instants while class times are expanded in the feed's local wall-clock time, so they stay right
+  instants, and series that carry a timezone are expanded in that timezone, so they stay right
   across DST switches.
 - **Blocked bot.** When Telegram reports that a user blocked the bot, that chat's data is deleted.
   On Discord a user who closed their DMs keeps the timetable but loses pushes; a deleted channel
@@ -500,8 +501,9 @@ The public Discord bot has a short [privacy policy](PRIVACY.md) and [terms](TERM
   just four Bot API methods, so it uses a small client (about 150 lines including the
   adapter) on top of aiohttp.
 - **Recurrence with `python-dateutil`, not `recurring-ical-events`.** The latter is LGPL. Series
-  are expanded in the event's local wall-clock time, so a class at 08:30 stays at 08:30 across
-  DST switches. Times in the spring-forward gap are shifted the way calendar apps do it, and
+  with a `TZID` (or floating times) are expanded in the event's local wall-clock time, so a class
+  at 08:30 stays at 08:30 across DST switches; a series written in UTC repeats at the same UTC
+  time, as the feed says. Times in the spring-forward gap are shifted the way calendar apps do it, and
   ambiguous autumn times use the first occurrence. `EXDATE` and `RECURRENCE-ID` are matched as
   UTC instants.
 - **Stable occurrence keys.** `UID@original-start-UTC` keeps an occurrence's identity when it is
@@ -546,7 +548,7 @@ uv run pytest --cov               # fails under 85 % coverage
 uv run python scripts/render_demo_chats.py docs/screenshots   # regenerate the demo mock-ups
 ```
 
-The suite has **427 tests** with **98% line coverage** (CI fails below 85%) and runs in about
+The suite has **432 tests** with **98% line coverage** (CI fails below 85%) and runs in about
 ten seconds. All tests use fictional fixtures (`tests/fixtures/*.ics` and the bundled sample).
 They cover:
 

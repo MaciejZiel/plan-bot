@@ -38,9 +38,11 @@ EXPAND_SECONDS = 10.0
 #: Classes do not repeat by the hour, minute or second; such rules are hostile or broken.
 SUB_DAILY = frozenset({"HOURLY", "MINUTELY", "SECONDLY"})
 DEFAULT_DURATION = timedelta(minutes=90)
-#: The PJATK timetable export (``PRODID:-//PJWSTK PLAN//EN``) writes local Warsaw wall
-#: times with a ``Z`` suffix, as if they were UTC (an 08:30 class is ``083000Z``).
-WALL_CLOCK_UTC_PRODID = "PJWSTK PLAN"
+#: Bumped whenever the same feed can parse to different lessons than before. Stored per
+#: subscription, so the first refresh after an upgrade can replace the snapshot silently
+#: instead of announcing every shifted class as a change.
+#: 1: a ``Z`` time is UTC again (version 0 read it as local time for the PJATK export).
+PARSER_VERSION = 1
 #: ``Subject s. W21``: some exports append the room to the title and leave LOCATION empty.
 _TRAILING_ROOM = re.compile(r"^(?P<title>.*\S)\s+s\.\s+(?P<room>\S+)$", re.IGNORECASE)
 
@@ -96,8 +98,6 @@ def expand(
     budget = _Budget(seconds)
     cal = parse_calendar(data)
     budget.check()
-    if WALL_CLOCK_UTC_PRODID in str(cal.get("PRODID", "")):
-        _read_utc_as_wall_clock(cal)
     masters: dict[str, Component] = {}
     overrides: dict[str, list[Component]] = {}
     singles: list[Component] = []
@@ -140,26 +140,6 @@ def expand(
         raise FeedTooComplex(f"more than {MAX_LESSONS} classes in the next months")
     lessons.sort(key=lambda les: (les.start, les.summary, les.key))
     return _unique_keys(lessons)
-
-
-def _read_utc_as_wall_clock(cal: Calendar) -> None:
-    """Treat times labelled UTC as local wall-clock times, for exporters that mislabel them.
-
-    The value is made naive, so it later gets the timezone the bot is configured for
-    and keeps its wall-clock time on both sides of a daylight saving change.
-    """
-    for event in cal.walk("VEVENT"):
-        for name in ("DTSTART", "DTEND", "RECURRENCE-ID"):
-            if name not in event:
-                continue
-            value = event.decoded(name)
-            if (
-                isinstance(value, datetime)
-                and value.tzinfo is not None
-                and value.utcoffset() == timedelta(0)
-            ):
-                del event[name]
-                event.add(name, value.replace(tzinfo=None))
 
 
 def _split_room(summary: str, location: str) -> tuple[str, str]:

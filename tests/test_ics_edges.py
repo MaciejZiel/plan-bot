@@ -122,27 +122,78 @@ def test_expansion_has_a_time_budget() -> None:
         expand(data, HOSTILE_WINDOW, WARSAW, seconds=0.1)
 
 
-# ------------------------------------------------- exporters that mislabel local times
+# ------------------------------------------------------- the PJATK (Gakko) file export
+# It labels real UTC instants with Z and does the summer/winter shift itself.
 
 WALLCLOCK = expand(
-    fixture_bytes("wallclock_export.ics"), Window(warsaw(2026, 1, 1), warsaw(2028, 1, 1)), WARSAW
+    fixture_bytes("gakko_export.ics"), Window(warsaw(2026, 1, 1), warsaw(2028, 1, 1)), WARSAW
 )
 
 
-def test_utc_labelled_times_from_the_pjatk_export_are_local_wall_clock() -> None:
+def test_z_times_are_utc_and_shown_in_warsaw_time() -> None:
     before, after, _ = WALLCLOCK
-    # Both sides of the 25 Oct 2026 change back to winter time keep 10:15 on the wall.
-    assert (before.start, before.end) == (warsaw(2026, 10, 22, 10, 15), warsaw(2026, 10, 22, 12))
-    assert (after.start, after.end) == (warsaw(2026, 10, 27, 10, 15), warsaw(2026, 10, 27, 12))
-    assert before.start.utcoffset() == timedelta(hours=2)
-    assert after.start.utcoffset() == timedelta(hours=1)
+    # 10:00Z is 12:00 in summer time (22 Oct) and 11:00Z is 12:00 in winter time (27 Oct).
+    assert before.start == datetime(2026, 10, 22, 10, 0, tzinfo=UTC)
+    assert after.start == datetime(2026, 10, 27, 11, 0, tzinfo=UTC)
+    for lesson, offset in ((before, 2), (after, 1)):
+        local = lesson.start.astimezone(WARSAW)
+        assert (local.hour, local.utcoffset()) == (12, timedelta(hours=offset))
 
 
-def test_other_exporters_keep_their_utc_times() -> None:
-    data = fixture_bytes("wallclock_export.ics").replace(b"PJWSTK PLAN", b"SOMEONE ELSE")
-    first = expand(data, Window(warsaw(2026, 1, 1), warsaw(2028, 1, 1)), WARSAW)[0]
-    assert first.start == datetime(2026, 10, 22, 10, 15, tzinfo=UTC)
-    assert first.start.astimezone(WARSAW).hour == 12
+def _one_event(start: str, end: str, prodid: str = "-//PJWSTK PLAN//EN") -> bytes:
+    return (
+        f"BEGIN:VCALENDAR\nPRODID:{prodid}\nBEGIN:VEVENT\nUID:z\nDTSTART:{start}\n"
+        f"DTEND:{end}\nSUMMARY:Class\nEND:VEVENT\nEND:VCALENDAR\n"
+    ).encode()
+
+
+WIDE_WINDOW = Window(warsaw(2026, 1, 1), warsaw(2028, 1, 1))
+
+
+def local_days_hours(lessons: list[Lesson]) -> list[tuple[int, int]]:
+    return [
+        (les.start.astimezone(WARSAW).day, les.start.astimezone(WARSAW).hour) for les in lessons
+    ]
+
+
+def hm(lesson: Lesson) -> tuple[int, int, int]:
+    """Local start hour, end hour and end minute."""
+    start, end = lesson.start.astimezone(WARSAW), lesson.end.astimezone(WARSAW)
+    return start.hour, end.hour, end.minute
+
+
+@pytest.mark.parametrize("prodid", ["-//PJWSTK PLAN//EN", "SOMEONE ELSE"])
+def test_a_noon_utc_class_is_14_in_summer_and_13_in_winter(prodid: str) -> None:
+    (summer,) = expand(
+        _one_event("20260928T120000Z", "20260928T133000Z", prodid), WIDE_WINDOW, WARSAW
+    )
+    (winter,) = expand(
+        _one_event("20261102T120000Z", "20261102T133000Z", prodid), WIDE_WINDOW, WARSAW
+    )
+    assert hm(summer) == (14, 15, 30)
+    assert hm(winter) == (13, 14, 30)
+
+
+def test_a_utc_series_keeps_its_utc_time_across_the_october_change() -> None:
+    # Without TZID an RRULE repeats at the same UTC time: 14:00 before the change, 13:00 after.
+    data = (
+        b"BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:s\nDTSTART:20261019T120000Z\n"
+        b"DTEND:20261019T133000Z\nRRULE:FREQ=WEEKLY;COUNT=3\nSUMMARY:Class\n"
+        b"END:VEVENT\nEND:VCALENDAR\n"
+    )
+    lessons = expand(data, WIDE_WINDOW, WARSAW)
+    assert local_days_hours(lessons) == [(19, 14), (26, 13), (2, 13)]
+    assert all(les.duration == timedelta(minutes=90) for les in lessons)
+
+
+def test_a_tzid_series_keeps_its_local_time_across_the_october_change() -> None:
+    data = (
+        b"BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:s\nDTSTART;TZID=Europe/Warsaw:20261019T140000\n"
+        b"DTEND;TZID=Europe/Warsaw:20261019T153000\nRRULE:FREQ=WEEKLY;COUNT=3\nSUMMARY:Class\n"
+        b"END:VEVENT\nEND:VCALENDAR\n"
+    )
+    lessons = expand(data, WIDE_WINDOW, WARSAW)
+    assert local_days_hours(lessons) == [(19, 14), (26, 14), (2, 14)]
 
 
 def test_a_trailing_room_moves_from_the_title_to_the_location() -> None:

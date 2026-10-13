@@ -6,15 +6,25 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Fixed
+- Classes from the PJATK (Gakko) export were shown two hours early in summer (14:00 as 12:00). The
+  export labels real UTC times with `Z`; an earlier change read them as local time when `PRODID`
+  contained `PJWSTK PLAN`. That special case is removed: `Z` means UTC everywhere, so a `12:00Z`
+  class is 14:00 in summer and 13:00 in winter. Analysing a real export confirmed it: read as UTC
+  every start falls on the PJATK slot grid, read as local time it did not.
+- Schema change (migration `0003`): subscriptions remember the parser version their stored
+  timetable was read with. After this upgrade the first refresh of each link subscription replaces
+  the snapshot without a change alert, so shifted times are not announced as changes. A file that
+  was uploaded is not stored, so it cannot be re-read: upload it again (the reply then skips the
+  change list once).
+
 ### Added
 - `/subscribe` accepts an `.ics` file attachment (`file` option) for universities that only offer a
   download. The parsed timetable is stored for that chat only, answers are ephemeral and
   `/forget` deletes it. Uploads obey the download size limit, are never refreshed automatically,
   show as `uploaded file, <date>` in `/status`, and re-uploading replaces the file and reports
   what changed. No schema change.
-- The PJATK export is read correctly: its UTC-labelled times are taken as Warsaw wall-clock time
-  (only when `PRODID` contains `PJWSTK PLAN`) and a trailing ` s. <room>` in the title becomes the
-  location when the event has none.
+- A trailing ` s. <room>` in the title (PJATK export) becomes the location when the event has none.
 - `/groups` and `/filter` say that filtering is pointless when a timetable has a single group tag.
 - Discord is first-class: localised slash commands (`pl`, `en-US`, `en-GB`) including
   `/remind set|list|off`, embeds with room, teacher and a live countdown, buttons that mirror the

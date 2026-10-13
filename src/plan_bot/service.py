@@ -32,7 +32,7 @@ from plan_bot.formatting import (
     humanize,
 )
 from plan_bot.i18n import DEFAULT_LANG, LANGS, normalize_lang, tr
-from plan_bot.ics import FeedTooComplex, IcsError, Window, expand
+from plan_bot.ics import PARSER_VERSION, FeedTooComplex, IcsError, Window, expand
 from plan_bot.repository import ChatRef, Repository
 from plan_bot.timetable import (
     group_names,
@@ -205,6 +205,7 @@ class BotService:
         now = self.clock()
         lessons = await self._expand(data, now, lang, not_ics_key="upload_not_ics")
         previous = await self.repo.get(chat)
+        reparsed = previous is not None and previous.parser_version < PARSER_VERSION
         old = (
             await self.repo.lessons(previous.id)
             if previous is not None and previous.ics_url == UPLOAD_URL
@@ -215,7 +216,9 @@ class BotService:
         lines = self._saved_lines(
             sub, lessons, now, tr(lang, "saved", where=tr(lang, "feed_upload"))
         )
-        if old and window_end is not None:
+        if old and reparsed:
+            lines.append(tr(lang, "upload_reparsed"))
+        elif old and window_end is not None:
             until = min(window_end, now + timedelta(days=self.settings.change_horizon_days))
             changes = [
                 c
@@ -457,7 +460,10 @@ class BotService:
             sub.window_end or window_end,
             now + timedelta(days=self.settings.change_horizon_days),
         )
-        changes = diff(old, new, since=now, until=until) if old else []
+        # A snapshot parsed by an older parser differs for reasons that are not the
+        # timetable's doing, so the first refresh after an upgrade is a silent re-import.
+        stale = sub.parser_version < PARSER_VERSION
+        changes = diff(old, new, since=now, until=until) if old and not stale else []
         if notify and changes and sub.notify_changes and sub.ics_url != DEMO_URL:
             relevant = [c for c in changes if c.lesson.matches(self._filter(sub))]
             if relevant:
@@ -550,7 +556,12 @@ class BotService:
         """Save the snapshot; ``None`` if the chat changed its feed or was deleted meanwhile."""
         window = self._window(now)
         stored = await self.repo.replace_lessons(
-            sub.id, lessons, refreshed_at=now, window_end=window.end, feed_url=sub.ics_url
+            sub.id,
+            lessons,
+            refreshed_at=now,
+            window_end=window.end,
+            feed_url=sub.ics_url,
+            parser_version=PARSER_VERSION,
         )
         return window.end if stored else None
 

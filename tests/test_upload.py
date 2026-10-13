@@ -7,6 +7,7 @@ from datetime import timedelta
 import pytest
 
 from plan_bot.config import Settings
+from plan_bot.ics import PARSER_VERSION
 from plan_bot.repository import ChatRef, Repository
 from plan_bot.service import BotService, UserError
 from tests.conftest import FakeClock, FakeFeeds, RecordingNotifier, fixture_bytes, warsaw
@@ -233,11 +234,26 @@ async def test_the_pjatk_style_export_shows_local_times_rooms_and_one_group(
     service: BotService, clock: FakeClock
 ) -> None:
     clock.now = warsaw(2026, 10, 20, 7, 0)
-    reply = await upload(service, fixture_bytes("wallclock_export.ics"))
+    reply = await upload(service, fixture_bytes("gakko_export.ics"))
     assert "Groups in this timetable" not in reply  # one tag cannot split anything
     assert "only one group tag (PLAN-FICTIONAL)" in await service.groups(CHAT)
     assert "only one group tag" in await service.set_filter(CHAT, "PLAN-FICTIONAL")
     text = await service.next(CHAT)
     assert "Imaginary Algebra lecture" in text
-    assert "10:15" in text
+    assert "12:00" in text
     assert "W21" in text
+
+
+async def test_reupload_after_a_parser_change_does_not_list_every_class_as_changed(
+    service: BotService, repo: Repository
+) -> None:
+    await upload(service, BEFORE)
+    await repo.update(CHAT, parser_version=0)
+    reply = await upload(service, AFTER)
+    assert "read differently before" in reply
+    assert "Timetable changed" not in reply
+    sub = await repo.get(CHAT)
+    assert sub is not None
+    assert sub.parser_version == PARSER_VERSION
+    # The next upload is compared as usual.
+    assert "read differently" not in await upload(service, BEFORE)

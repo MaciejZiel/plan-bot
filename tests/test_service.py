@@ -8,7 +8,7 @@ from datetime import timedelta
 import pytest
 
 from plan_bot.config import Settings
-from plan_bot.ics import IcsError
+from plan_bot.ics import PARSER_VERSION, IcsError
 from plan_bot.repository import ChatRef, Repository
 from plan_bot.service import BotService, ChatUnavailable, NotificationsBlocked, UserError
 from plan_bot.views import DayView, NextView, ReminderView, View, WeekView, render_text
@@ -468,3 +468,34 @@ async def test_remind_list_reports_the_current_setting(service: BotService) -> N
     await service.set_reminder(CHAT, "off")
     assert await service.set_reminder(CHAT, "status") == "Reminders are off."
     assert await service.set_reminder(OTHER, "list") == "Reminders are off."
+
+
+async def test_first_refresh_after_a_parser_change_is_silent(
+    service: BotService,
+    repo: Repository,
+    feeds: FakeFeeds,
+    clock: FakeClock,
+    notifier: RecordingNotifier,
+) -> None:
+    feeds.payloads[URL] = fixture_bytes("edits_before.ics")
+    await service.set_feed(CHAT, URL)
+    sub = await repo.get(CHAT)
+    assert sub is not None
+    assert sub.parser_version == PARSER_VERSION
+
+    # A subscription stored before parser versions existed, whose feed now parses differently.
+    await repo.update(CHAT, parser_version=0)
+    feeds.payloads[URL] = fixture_bytes("edits_after.ics")
+    clock.now += timedelta(minutes=31)
+    assert await service.refresh_due(clock.now) == 1
+    assert notifier.sent == []
+    sub = await repo.get(CHAT)
+    assert sub is not None
+    assert sub.parser_version == PARSER_VERSION
+    assert await repo.lessons(sub.id)  # the snapshot was replaced, not dropped
+
+    # Later changes are announced as usual.
+    feeds.payloads[URL] = fixture_bytes("edits_before.ics")
+    clock.now += timedelta(minutes=31)
+    assert await service.refresh_due(clock.now) == 1
+    assert len(notifier.sent) == 1
