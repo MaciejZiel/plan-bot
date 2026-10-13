@@ -18,6 +18,9 @@ async def test_tick_runs_jobs(
     clock.now = warsaw(2026, 10, 12, 8, 20)
     scheduler = Scheduler(service, tick_seconds=0.01, clock=clock)
     await scheduler.tick()
+    # tick() starts the feed refresh in the background; let it finish before the
+    # engine is disposed, or its pooled connection is garbage collected unclosed.
+    await scheduler.wait_for_refresh()
     assert any(text.startswith("Reminder:") for text in notifier.texts())
 
 
@@ -38,7 +41,9 @@ async def test_failing_job_does_not_stop_others(
 
     monkeypatch.setattr(service, "send_due_reminders", broken)
     monkeypatch.setattr(service, "send_weekly_summaries", weekly)
-    await Scheduler(service, clock=clock).tick()
+    scheduler = Scheduler(service, clock=clock)
+    await scheduler.tick()
+    await scheduler.wait_for_refresh()
     assert calls == ["weekly"]
     assert "scheduled job reminders failed" in caplog.text
 
@@ -47,7 +52,10 @@ async def test_run_stops_on_event(service: BotService, clock: FakeClock) -> None
     scheduler = Scheduler(service, tick_seconds=0.01, clock=clock)
     stop = asyncio.Event()
     task = asyncio.create_task(scheduler.run(stop))
-    await asyncio.sleep(0.05)
+    for _ in range(200):  # a slow machine may need more than a few milliseconds per tick
+        if scheduler._ticks >= 2:
+            break
+        await asyncio.sleep(0.01)
     stop.set()
     await asyncio.wait_for(task, timeout=1)
     assert scheduler._ticks >= 2
