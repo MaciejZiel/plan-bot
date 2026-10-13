@@ -160,7 +160,8 @@ uv run plan-bot console --at 2026-10-12T07:45   # pretend it is a Monday morning
 4. Optional: set `DISCORD_GUILD_ID` to your server's ID (Developer Mode → right-click the server
    → Copy Server ID). Slash commands then appear instantly instead of after the global sync.
 
-Set only one of the tokens to run on just that platform.
+Set only one of the tokens to run on just that platform. Discord needs the optional extra
+(`uv sync --extra discord`, or `pip install 'plan-bot[discord]'`).
 
 ### 3. Run it
 
