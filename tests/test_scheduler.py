@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pytest
 
-from plan_bot.repository import ChatRef
+from plan_bot.repository import ChatRef, Repository
 from plan_bot.scheduler import Scheduler
 from plan_bot.service import BotService
-from tests.conftest import FakeClock, RecordingNotifier, warsaw
+from tests.conftest import FakeClock, RecordingNotifier, fixture_bytes, warsaw
 
 
 async def test_tick_runs_jobs(
@@ -22,6 +22,26 @@ async def test_tick_runs_jobs(
     # engine is disposed, or its pooled connection is garbage collected unclosed.
     await scheduler.wait_for_refresh()
     assert any(text.startswith("Reminder:") for text in notifier.texts())
+
+
+async def test_tick_tells_a_stale_upload_to_upload_again_once(
+    service: BotService, repo: Repository, clock: FakeClock, notifier: RecordingNotifier
+) -> None:
+    chat = ChatRef("discord", "user:9")
+    data = fixture_bytes("edits_before.ics")
+
+    async def read() -> bytes:
+        return data
+
+    await service.upload_feed(chat, "plan.ics", "text/calendar", len(data), read)
+    await repo.update(chat, parser_version=0, reminder_minutes=0)
+    scheduler = Scheduler(service, tick_seconds=0.01, clock=clock)
+    for _ in range(3):
+        await scheduler.tick()
+        await scheduler.wait_for_refresh()
+        clock.now += timedelta(minutes=1)
+    assert [c for c, _ in notifier.sent] == [chat]
+    assert "upload the .ics file again" in notifier.texts()[0]
 
 
 async def test_failing_job_does_not_stop_others(

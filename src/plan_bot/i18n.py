@@ -210,6 +210,24 @@ _M: dict[str, dict[str, str]] = {
         "pl": "Poprzedni wgrany plik został zastąpiony. Godziny zajęć były wcześniej czytane "
         "inaczej, więc tym razem nie pokazuję listy zmian.",
     },
+    "upload_stale_notice": {
+        "en": "Class times in your uploaded timetable were read incorrectly before an update "
+        "(they could be shifted by an hour or two). Please upload the .ics file again with "
+        "/subscribe to get the corrected times.",
+        "pl": "Godziny zajęć w Twoim wgranym planie były wcześniej czytane błędnie (mogły być "
+        "przesunięte o godzinę lub dwie). Wgraj plik .ics ponownie przez /subscribe, żeby "
+        "dostać poprawione godziny.",
+    },
+    "upload_stale_warning": {
+        "en": "Warning: these times may be shifted. Upload your .ics file again with /subscribe.",
+        "pl": "Uwaga: te godziny mogą być przesunięte. Wgraj plik .ics ponownie przez /subscribe.",
+    },
+    "refreshed_reparsed": {
+        "en": "Timetable re-read with corrected class times. Earlier times could be shifted, so "
+        "no list of changes is shown.",
+        "pl": "Plan wczytany ponownie z poprawionymi godzinami zajęć. Wcześniejsze godziny mogły "
+        "być przesunięte, więc nie pokazuję listy zmian.",
+    },
     "upload_same": {
         "en": "The previous upload was replaced; no changes in upcoming classes.",
         "pl": "Poprzedni wgrany plik został zastąpiony; bez zmian w nadchodzących zajęciach.",

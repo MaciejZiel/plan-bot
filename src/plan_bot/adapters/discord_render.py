@@ -177,6 +177,14 @@ def reminder_embed(view: ReminderView) -> discord.Embed:
 
 
 def view_embeds(view: View) -> list[discord.Embed]:
+    embeds = _view_embeds(view)
+    warning = getattr(view, "warning", "")
+    if warning:
+        embeds.append(discord.Embed(description=warning, colour=AMBER))
+    return embeds
+
+
+def _view_embeds(view: View) -> list[discord.Embed]:
     match view:
         case DayView():
             return [day_embed(view)]
