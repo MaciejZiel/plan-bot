@@ -158,7 +158,8 @@ def _read_utc_as_wall_clock(cal: Calendar) -> None:
                 and value.tzinfo is not None
                 and value.utcoffset() == timedelta(0)
             ):
-                event[name].dt = value.replace(tzinfo=None)  # type: ignore[union-attr]
+                del event[name]
+                event.add(name, value.replace(tzinfo=None))
 
 
 def _split_room(summary: str, location: str) -> tuple[str, str]:
