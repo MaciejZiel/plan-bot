@@ -27,6 +27,7 @@ from plan_bot.i18n import LANGS, tr
 from plan_bot.ratelimit import RateLimiter
 from plan_bot.repository import ChatRef, Repository
 from plan_bot.service import BotService, ChatUnavailable, NotificationsBlocked
+from plan_bot.timetable import NextClass
 from plan_bot.views import DayView, NextView, ReminderView, WeekView
 from tests.conftest import FakeClock, RecordingNotifier, warsaw
 
@@ -930,6 +931,21 @@ def test_reminder_embed() -> None:
     assert embed.title == "Przypomnienie: Maths"
     assert embed.fields[0].name == "Sala"
     assert render.view_embeds(ReminderView(lesson(8), "en", now.tzinfo, now))  # type: ignore[arg-type]
+
+
+def test_long_feed_texts_are_clipped_to_discord_limits() -> None:
+    now = warsaw(2026, 10, 12, 7, 45)
+    long = lesson(8, summary="S" * 400, location="R" * 1500, description="Lecturer: " + "T" * 2000)
+    for view in (
+        ReminderView(long, "en", now.tzinfo, now),  # type: ignore[arg-type]
+        NextView(NextClass(long, long), "en", now.tzinfo, now),  # type: ignore[arg-type]
+    ):
+        for embed in render.view_embeds(view):
+            assert len(embed.title or "") <= 256
+            assert all(len(f.value or "") <= 1024 for f in embed.fields)
+            assert len(embed) <= 6000
+    blank = lesson(8, location="   ")
+    assert not render.reminder_embed(ReminderView(blank, "en", now.tzinfo, now)).fields  # type: ignore[arg-type]
 
 
 def test_text_embeds_split_long_text() -> None:

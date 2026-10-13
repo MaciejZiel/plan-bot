@@ -22,6 +22,7 @@ AMBER = 0xFAA61A
 RED = 0xED4245
 
 DESCRIPTION_LIMIT = 4096
+TITLE_LIMIT = 256
 FIELD_LIMIT = 1024
 #: Seven day fields must stay below the 6000 characters Discord allows per message.
 WEEK_FIELD_LIMIT = 700
@@ -60,13 +61,20 @@ def _lesson_block(lesson: Lesson, tz: tzinfo, lang: str, *, with_relative: bool)
     return f"{title}\n{detail}" if detail else title
 
 
+def _title(text: str) -> str:
+    """Feed texts (subjects) can be long; Discord rejects titles over 256 characters."""
+    return _clip(text, TITLE_LIMIT)
+
+
 def _lesson_fields(embed: discord.Embed, lesson: Lesson, lang: str) -> None:
-    if lesson.location:
-        embed.add_field(name=tr(lang, "dc.room"), value=lesson.location, inline=True)
-    if lesson.teacher:
-        embed.add_field(name=tr(lang, "dc.teacher"), value=lesson.teacher, inline=True)
-    if lesson.groups:
-        embed.add_field(name=tr(lang, "dc.groups"), value=", ".join(lesson.groups), inline=True)
+    fields = [
+        ("dc.room", lesson.location),
+        ("dc.teacher", lesson.teacher),
+        ("dc.groups", ", ".join(lesson.groups)),
+    ]
+    for key, value in fields:
+        if value.strip():
+            embed.add_field(name=tr(lang, key), value=_clip(value, FIELD_LIMIT), inline=True)
 
 
 def day_embed(view: DayView) -> discord.Embed:
@@ -127,7 +135,7 @@ def next_embeds(view: NextView) -> list[discord.Embed]:
     current = view.info.current
     if current is not None:
         now_embed = discord.Embed(
-            title=f"{tr(lang, 'dc.in_progress')}: {current.summary}",
+            title=_title(f"{tr(lang, 'dc.in_progress')}: {current.summary}"),
             description=f"**{span(current, tz)}** · {tr(lang, 'dc.ends')} {relative(current.end)}",
             colour=GREEN,
         )
@@ -142,7 +150,7 @@ def next_embeds(view: NextView) -> list[discord.Embed]:
     else:
         when = upcoming.start.astimezone(tz)
         embed = discord.Embed(
-            title=f"{tr(lang, 'dc.next')}: {upcoming.summary}",
+            title=_title(f"{tr(lang, 'dc.next')}: {upcoming.summary}"),
             description=(
                 f"{short_day(when.date(), lang)}, **{span(upcoming, tz)}**\n"
                 f"{tr(lang, 'dc.starts')} {relative(upcoming.start)}"
@@ -158,7 +166,7 @@ def next_embeds(view: NextView) -> list[discord.Embed]:
 def reminder_embed(view: ReminderView) -> discord.Embed:
     lesson, lang = view.lesson, view.lang
     embed = discord.Embed(
-        title=f"{tr(lang, 'dc.reminder')}: {lesson.summary}",
+        title=_title(f"{tr(lang, 'dc.reminder')}: {lesson.summary}"),
         description=(
             f"**{span(lesson, view.tz)}** · {tr(lang, 'dc.starts')} {relative(lesson.start)}"
         ),
