@@ -7,6 +7,7 @@ deliver the returned text; background jobs push messages through a
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
@@ -25,6 +26,7 @@ from plan_bot.formatting import (
     format_week,
     humanize,
 )
+from plan_bot.i18n import DEFAULT_LANG, LANGS, normalize_lang, tr
 from plan_bot.ics import IcsError, Window, expand
 from plan_bot.repository import ChatRef, Repository
 from plan_bot.timetable import (
@@ -47,6 +49,14 @@ class UserError(Exception):
     """A problem caused by user input; the message is shown verbatim."""
 
 
+class NoFeedError(UserError):
+    """The chat has not set a timetable yet."""
+
+
+class ChatUnavailable(Exception):
+    """Raised by a notifier when the chat is gone (the user blocked the bot, left, ...)."""
+
+
 class FeedSource(Protocol):
     async def fetch(self, url: str) -> bytes: ...
 
@@ -64,19 +74,13 @@ def utc_now() -> datetime:
     return datetime.now(UTC)
 
 
-NO_FEED = (
-    "No timetable yet. Send /setfeed <ICS link> with your university calendar link, "
-    "or /setfeed demo to try the fictional sample timetable."
-)
-
-
-def _on_off(raw: str | None, what: str) -> bool:
+def _on_off(raw: str | None, what: str, lang: str) -> bool:
     value = (raw or "").strip().lower()
     if value in {"on", "yes", "1", "true"}:
         return True
     if value in {"off", "no", "0", "false"}:
         return False
-    raise UserError(f"Use /{what} on or /{what} off")
+    raise UserError(tr(lang, "on_off_usage", what=what))
 
 
 class BotService:
@@ -96,149 +100,192 @@ class BotService:
         self.clock = clock
         self.notifier: Notifier = notifier or NullNotifier()
 
+    # ----------------------------------------------------------------- language
+
+    async def language(self, chat: ChatRef) -> str:
+        sub = await self.repo.get(chat)
+        return sub.language if sub is not None else DEFAULT_LANG
+
+    async def adopt_language(self, chat: ChatRef, hint: str | None) -> None:
+        """On first contact, start in the language of the user's app (if supported)."""
+        lang = normalize_lang(hint)
+        if lang is not None and await self.repo.get(chat) is None:
+            await self.repo.update(chat, language=lang)
+
+    async def set_language(self, chat: ChatRef, raw: str | None) -> str:
+        lang = (raw or "").strip().lower()
+        if lang not in LANGS:
+            raise UserError(tr(await self.language(chat), "lang_usage"))
+        await self.repo.update(chat, language=lang)
+        return tr(lang, "lang_set")
+
+    async def has_feed(self, chat: ChatRef) -> bool:
+        sub = await self.repo.get(chat)
+        return sub is not None and sub.ics_url is not None
+
     # ------------------------------------------------------------------ commands
 
     async def set_feed(self, chat: ChatRef, raw_url: str | None) -> str:
+        lang = await self.language(chat)
         if not raw_url or not raw_url.strip():
-            raise UserError("Usage: /setfeed <ICS link>  (or /setfeed demo)")
+            raise UserError(tr(lang, "subscribe_usage"))
         try:
             url = normalize_url(raw_url)
         except FetchError as exc:
-            raise UserError(str(exc)) from exc
+            raise UserError(exc.localized(lang)) from exc
         now = self.clock()
-        lessons = await self._download(url, now)
+        lessons = await self._download(url, now, lang)
         sub = await self.repo.update(chat, ics_url=url)
         await self._store(sub, lessons, now)
         upcoming = [les for les in lessons if les.start >= now and not les.cancelled]
         groups = group_names(lessons)
         lines = [
-            f"Timetable saved ({redact_url(url)}).",
-            f"{len(upcoming)} upcoming classes found.",
+            tr(lang, "saved", where=self._where(url, lang)),
+            tr(lang, "upcoming", n=len(upcoming)),
         ]
         if groups:
-            lines.append(f"Groups in this timetable: {', '.join(groups)}")
-            lines.append("Show only yours with e.g. /filter " + ",".join(groups[:2]))
+            lines.append(tr(lang, "groups_found", groups=", ".join(groups)))
+            lines.append(tr(lang, "filter_hint", example=",".join(groups[:2])))
         if sub.reminder_minutes:
-            lines.append(f"Reminders are on, {sub.reminder_minutes} min before each class.")
+            lines.append(tr(lang, "reminders_on", n=sub.reminder_minutes))
+        if url == DEMO_URL:
+            lines.append(tr(lang, "saved_demo"))
         return "\n".join(lines)
 
     async def today(self, chat: ChatRef) -> str:
         sub, lessons = await self._load(chat)
         day = self.clock().astimezone(self.tz).date()
-        return format_day(
-            "Today", day, lessons_on(lessons, day, self.tz, self._filter(sub)), self.tz
-        )
+        selected = lessons_on(lessons, day, self.tz, self._filter(sub))
+        return format_day(tr(sub.language, "title.today"), day, selected, self.tz, sub.language)
 
     async def tomorrow(self, chat: ChatRef) -> str:
         sub, lessons = await self._load(chat)
         day = self.clock().astimezone(self.tz).date() + timedelta(days=1)
         selected = lessons_on(lessons, day, self.tz, self._filter(sub))
-        return format_day("Tomorrow", day, selected, self.tz)
+        title = tr(sub.language, "title.tomorrow")
+        return format_day(title, day, selected, self.tz, sub.language)
 
     async def next(self, chat: ChatRef) -> str:
         sub, lessons = await self._load(chat)
         now = self.clock()
-        return format_next(next_class(lessons, now, self._filter(sub)), now, self.tz)
+        info = next_class(lessons, now, self._filter(sub))
+        return format_next(info, now, self.tz, sub.language)
 
     async def week(self, chat: ChatRef, which: str | None = None) -> str:
         sub, lessons = await self._load(chat)
+        lang = sub.language
         choice = (which or "").strip().lower()
         if choice not in {"", "this", "next"}:
-            raise UserError("Use /week or /week next")
+            raise UserError(tr(lang, "week_usage"))
         monday = monday_of(self.clock().astimezone(self.tz).date())
-        title = "This week"
+        title = tr(lang, "title.week")
         if choice == "next":
             monday += timedelta(days=7)
-            title = "Next week"
+            title = tr(lang, "title.next_week")
         days = week_of(lessons, monday, self.tz, self._filter(sub))
-        return format_week(days, self.tz, title=title)
+        return format_week(days, self.tz, title=title, lang=lang)
 
     async def groups(self, chat: ChatRef) -> str:
         sub, lessons = await self._load(chat)
+        lang = sub.language
         names = group_names(lessons)
         current = self._filter(sub)
-        lines = [f"Groups: {', '.join(names)}" if names else "This timetable has no group tags."]
+        lines = [
+            tr(lang, "groups_list", groups=", ".join(names)) if names else tr(lang, "groups_none")
+        ]
         lines.append(
-            f"Current filter: {sub.group_filter}" if current else "No filter: showing everything."
+            tr(lang, "filter_current", f=sub.group_filter) if current else tr(lang, "filter_none")
         )
         return "\n".join(lines)
 
     async def set_filter(self, chat: ChatRef, raw: str | None) -> str:
+        lang = await self.language(chat)
         value = (raw or "").strip()
         if not value:
-            raise UserError("Usage: /filter L1,C2  or  /filter off")
+            raise UserError(tr(lang, "filter_usage"))
         if value.lower() in {"off", "none", "clear", "all"}:
             await self.repo.update(chat, group_filter="")
-            return "Filter removed: showing all classes."
+            return tr(lang, "filter_removed")
         cleaned = GroupFilter.clean(value)
         parsed = GroupFilter.parse(cleaned)
         sub = await self.repo.update(chat, group_filter=cleaned)
         known = {g.casefold() for g in group_names(await self.repo.lessons(sub.id))}
         unknown = sorted(parsed.tokens - known)
-        reply = f"Filter set: {cleaned}. Classes without a group are always shown."
+        reply = tr(lang, "filter_set", f=cleaned)
         if known and unknown:
-            reply += f"\nNot found in the timetable tags: {', '.join(unknown)}"
+            reply += "\n" + tr(lang, "filter_unknown", x=", ".join(unknown))
         return reply
 
     async def set_reminder(self, chat: ChatRef, raw: str | None) -> str:
+        lang = await self.language(chat)
         value = (raw or "").strip().lower()
         if value in {"off", "0", "no"}:
             await self.repo.update(chat, reminder_minutes=0)
-            return "Reminders are off."
+            return tr(lang, "remind_off")
         try:
             minutes = int(value.removesuffix("min").strip())
         except ValueError as exc:
-            raise UserError("Usage: /remind 15  (minutes before class)  or  /remind off") from exc
+            raise UserError(tr(lang, "remind_usage")) from exc
         if not 1 <= minutes <= MAX_REMINDER_MINUTES:
-            raise UserError(f"Pick between 1 and {MAX_REMINDER_MINUTES} minutes.")
+            raise UserError(tr(lang, "remind_range", max=MAX_REMINDER_MINUTES))
         await self.repo.update(chat, reminder_minutes=minutes)
-        return f"I will remind you {humanize(timedelta(minutes=minutes))} before each class."
+        return tr(lang, "remind_set", delta=humanize(timedelta(minutes=minutes), lang))
 
     async def set_changes(self, chat: ChatRef, raw: str | None) -> str:
-        enabled = _on_off(raw, "changes")
+        lang = await self.language(chat)
+        enabled = _on_off(raw, "changes", lang)
         await self.repo.update(chat, notify_changes=enabled)
-        return "Change alerts are on." if enabled else "Change alerts are off."
+        return tr(lang, "changes_on" if enabled else "changes_off")
 
     async def set_summary(self, chat: ChatRef, raw: str | None) -> str:
-        enabled = _on_off(raw, "summary")
+        lang = await self.language(chat)
+        enabled = _on_off(raw, "summary", lang)
         await self.repo.update(chat, weekly_summary=enabled)
-        return "Weekly summary is on." if enabled else "Weekly summary is off."
+        return tr(lang, "summary_on" if enabled else "summary_off")
 
     async def status(self, chat: ChatRef) -> str:
         sub = await self.repo.get(chat)
+        lang = sub.language if sub is not None else DEFAULT_LANG
         if sub is None or sub.ics_url is None:
-            return NO_FEED
+            raise NoFeedError(tr(lang, "no_feed"))
         lessons = await self.repo.lessons(sub.id)
+        remind = (
+            tr(lang, "status_remind_min", n=sub.reminder_minutes)
+            if sub.reminder_minutes
+            else tr(lang, "off")
+        )
         lines = [
-            f"Feed: {redact_url(sub.ics_url)}",
-            f"Classes stored: {len(lessons)}",
-            f"Filter: {sub.group_filter or 'none'}",
-            "Reminders: "
-            + (f"{sub.reminder_minutes} min before" if sub.reminder_minutes else "off"),
-            f"Change alerts: {'on' if sub.notify_changes else 'off'}",
-            f"Weekly summary: {'on' if sub.weekly_summary else 'off'}",
+            tr(lang, "status_feed", where=self._where(sub.ics_url, lang)),
+            tr(lang, "status_classes", n=len(lessons)),
+            tr(lang, "status_filter", f=sub.group_filter or tr(lang, "status_none")),
+            tr(lang, "status_remind", v=remind),
+            tr(lang, "status_changes", v=tr(lang, "on" if sub.notify_changes else "off")),
+            tr(lang, "status_summary", v=tr(lang, "on" if sub.weekly_summary else "off")),
+            tr(lang, "status_lang", v=sub.language),
         ]
         if sub.last_refresh_at is not None:
-            ago = humanize(self.clock() - sub.last_refresh_at)
-            lines.append(f"Last refresh: {ago} ago")
+            ago = humanize(self.clock() - sub.last_refresh_at, lang)
+            lines.append(tr(lang, "status_refresh", ago=ago))
         if sub.last_error:
-            lines.append(f"Last error: {sub.last_error}")
+            lines.append(tr(lang, "status_error", e=sub.last_error))
         return "\n".join(lines)
 
     async def refresh(self, chat: ChatRef) -> str:
         sub = await self.repo.get(chat)
+        lang = sub.language if sub is not None else DEFAULT_LANG
         if sub is None or sub.ics_url is None:
-            return NO_FEED
+            raise NoFeedError(tr(lang, "no_feed"))
         changes = await self.refresh_subscription(sub, self.clock(), notify=False)
         relevant = [c for c in changes if c.lesson.matches(self._filter(sub))]
         if not relevant:
-            return "Timetable refreshed, no changes."
-        return format_changes(relevant, self.tz)
+            return tr(lang, "refreshed_same")
+        return format_changes(relevant, self.tz, lang)
 
     async def forget(self, chat: ChatRef) -> str:
+        lang = await self.language(chat)
         if await self.repo.delete(chat):
-            return "Done. Your feed link, settings and stored timetable were deleted."
-        return "There was nothing stored for this chat."
+            return tr(lang, "forgotten")
+        return tr(lang, "nothing_stored")
 
     # ---------------------------------------------------------- background jobs
 
@@ -255,12 +302,13 @@ class BotService:
                 await self.refresh_subscription(sub, now, notify=True)
             except UserError as exc:
                 count = await self.repo.record_error(sub.id, str(exc), now)
-                log.warning("refresh failed for %s:%s: %s", sub.platform, sub.chat_id, exc)
+                log.warning(
+                    "feed refresh failed",
+                    extra={"platform": sub.platform, "chat": _chat_tag(sub), "error": str(exc)},
+                )
                 if count == ERROR_NOTIFY_THRESHOLD:
                     await self._notify(
-                        sub,
-                        f"I could not refresh your timetable {count} times in a row: {exc}\n"
-                        "Check the link with /status or set a new one with /setfeed.",
+                        sub, tr(sub.language, "refresh_failing", count=count, error=exc)
                     )
         return refreshed
 
@@ -269,7 +317,7 @@ class BotService:
     ) -> list[Change]:
         assert sub.ics_url is not None
         old = await self.repo.lessons(sub.id)
-        new = await self._download(sub.ics_url, now)
+        new = await self._download(sub.ics_url, now, sub.language)
         window_end = await self._store(sub, new, now)
         until = min(
             window_end,
@@ -280,7 +328,7 @@ class BotService:
         if notify and changes and sub.notify_changes and sub.ics_url != DEMO_URL:
             relevant = [c for c in changes if c.lesson.matches(self._filter(sub))]
             if relevant:
-                await self._notify(sub, format_changes(relevant, self.tz))
+                await self._notify(sub, format_changes(relevant, self.tz, sub.language))
         return changes
 
     async def send_due_reminders(self, now: datetime) -> int:
@@ -292,7 +340,7 @@ class BotService:
             lessons = await self.repo.lessons(sub.id, start=now, end=horizon)
             for lesson in starting_between(lessons, now, horizon, self._filter(sub)):
                 if await self.repo.mark_reminded(sub.id, lesson.key, lesson.start):
-                    await self._notify(sub, format_reminder(lesson, now, self.tz))
+                    await self._notify(sub, format_reminder(lesson, now, self.tz, sub.language))
                     sent += 1
         return sent
 
@@ -312,7 +360,8 @@ class BotService:
                 continue
             lessons = await self.repo.lessons(sub.id)
             days = week_of(lessons, monday, self.tz, self._filter(sub))
-            await self._notify(sub, format_week(days, self.tz, title="Coming week"))
+            title = tr(sub.language, "title.coming_week")
+            await self._notify(sub, format_week(days, self.tz, title=title, lang=sub.language))
             await self.repo.update(ChatRef(sub.platform, sub.chat_id), last_weekly_key=key)
             sent += 1
         return sent
@@ -326,7 +375,11 @@ class BotService:
         # Keep the past week too, so "/week" still shows Monday on a Friday.
         return Window(now - timedelta(days=8), now + timedelta(days=self.settings.horizon_days))
 
-    async def _download(self, url: str, now: datetime) -> list[Lesson]:
+    @staticmethod
+    def _where(url: str, lang: str) -> str:
+        return tr(lang, "feed_demo") if url == DEMO_URL else redact_url(url)
+
+    async def _download(self, url: str, now: datetime, lang: str) -> list[Lesson]:
         try:
             if url == DEMO_URL:
                 data = demo_calendar(now.astimezone(self.tz).date())
@@ -334,9 +387,9 @@ class BotService:
                 data = await self.fetcher.fetch(url)
             return expand(data, self._window(now), self.tz)
         except FetchError as exc:
-            raise UserError(f"Could not download the timetable: {exc}") from exc
+            raise UserError(tr(lang, "download_failed", error=exc.localized(lang))) from exc
         except IcsError as exc:
-            raise UserError(f"That link does not return an iCalendar file ({exc}).") from exc
+            raise UserError(tr(lang, "not_ics", error=exc)) from exc
 
     async def _store(self, sub: Subscription, lessons: list[Lesson], now: datetime) -> datetime:
         window = self._window(now)
@@ -346,7 +399,8 @@ class BotService:
     async def _load(self, chat: ChatRef) -> tuple[Subscription, list[Lesson]]:
         sub = await self.repo.get(chat)
         if sub is None or sub.ics_url is None:
-            raise UserError(NO_FEED)
+            lang = sub.language if sub is not None else DEFAULT_LANG
+            raise NoFeedError(tr(lang, "no_feed"))
         return sub, await self.repo.lessons(sub.id)
 
     @staticmethod
@@ -357,8 +411,27 @@ class BotService:
         chat = ChatRef(sub.platform, sub.chat_id)
         try:
             await self.notifier.send(chat, text)
+        except ChatUnavailable:
+            # The user blocked the bot or left: stop working for nobody and drop their data.
+            log.info("chat unavailable, deleting its data", extra={"chat": _chat_tag(sub)})
+            await self.repo.delete(chat)
         except Exception:  # one broken chat must not stop the job for everybody
-            log.exception("failed to deliver a message to %s", chat)
+            log.exception("failed to deliver a message", extra={"chat": _chat_tag(sub)})
 
 
-__all__ = ["DEMO_URL", "BotService", "FeedSource", "Notifier", "UserError", "utc_now"]
+def _chat_tag(sub: Subscription) -> str:
+    """Short stable pseudonym for logs, so chat ids are not written to disk."""
+    digest = hashlib.sha256(f"{sub.platform}:{sub.chat_id}".encode()).hexdigest()
+    return digest[:8]
+
+
+__all__ = [
+    "DEMO_URL",
+    "BotService",
+    "ChatUnavailable",
+    "FeedSource",
+    "NoFeedError",
+    "Notifier",
+    "UserError",
+    "utc_now",
+]
