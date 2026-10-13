@@ -44,6 +44,7 @@ async def build_app(
         max_bytes=settings.max_ics_bytes,
         timeout_seconds=settings.http_timeout_seconds,
         allow_private=settings.allow_private_urls,
+        cache_seconds=settings.fetch_cache_seconds,
     )
     try:
         service = BotService(

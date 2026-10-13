@@ -4,15 +4,25 @@ from __future__ import annotations
 
 import asyncio
 import ipaddress
+import re
 import socket
+import time
+from datetime import date, timedelta
 from importlib import resources
 from urllib.parse import urljoin, urlsplit, urlunsplit
 
 import aiohttp
+from aiohttp.abc import AbstractResolver, ResolveResult
 
 DEMO_URL = "demo"
 MAX_REDIRECTS = 5
-USER_AGENT = "plan-bot/0.1 (+https://github.com/MaciejZiel/plan-bot)"
+MAX_URL_LENGTH = 2048
+USER_AGENT = "plan-bot/0.2 (+https://github.com/MaciejZiel/plan-bot)"
+#: The bundled demo timetable is written for this Monday and is shifted by whole
+#: weeks once it has expired, so a stranger always sees classes this week.
+DEMO_ANCHOR = date(2026, 10, 5)
+DEMO_VALID_UNTIL = date(2027, 1, 10)
+_ICS_DATE = re.compile(r"(?<![0-9])(20\d{2})(\d{2})(\d{2})(?=T\d{6}|(?![0-9]))")
 
 
 class FetchError(Exception):
@@ -25,11 +35,23 @@ def normalize_url(raw: str) -> str:
         return DEMO_URL
     if url.lower().startswith("webcal://"):
         url = "https://" + url[len("webcal://") :]
-    parts = urlsplit(url)
+    if len(url) > MAX_URL_LENGTH:
+        raise FetchError("The link is too long")
+    if any(ord(ch) < 33 or ord(ch) == 127 for ch in url):
+        raise FetchError("The link contains spaces or control characters")
+    try:
+        parts = urlsplit(url)
+        port = parts.port  # raises ValueError for a malformed port
+    except ValueError as exc:
+        raise FetchError("The link is not a valid URL") from exc
     if parts.scheme not in {"http", "https"}:
         raise FetchError("The link must start with https://, http:// or webcal://")
     if not parts.hostname:
         raise FetchError("The link has no host name")
+    if parts.username is not None or parts.password is not None:
+        raise FetchError("Links with a user name or password are not supported")
+    if port == 0:
+        raise FetchError("The link is not a valid URL")
     return urlunsplit(parts)
 
 
@@ -41,8 +63,25 @@ def redact_url(url: str) -> str:
     return f"{parts.scheme}://{parts.hostname}/…"
 
 
-def demo_calendar() -> bytes:
-    return resources.files("plan_bot").joinpath("data/sample.ics").read_bytes()
+def demo_shift(today: date) -> timedelta:
+    """Whole weeks by which the bundled timetable is moved so it covers ``today``."""
+    if today <= DEMO_VALID_UNTIL:
+        return timedelta(0)
+    monday = today - timedelta(days=today.weekday())
+    return timedelta(weeks=(monday - DEMO_ANCHOR).days // 7 - 4)
+
+
+def demo_calendar(today: date | None = None) -> bytes:
+    raw = resources.files("plan_bot").joinpath("data/sample.ics").read_bytes()
+    shift = demo_shift(today) if today is not None else timedelta(0)
+    if not shift:
+        return raw
+
+    def move(match: re.Match[str]) -> str:
+        moved = date(int(match[1]), int(match[2]), int(match[3])) + shift
+        return f"{moved:%Y%m%d}"
+
+    return _ICS_DATE.sub(move, raw.decode("utf-8")).encode("utf-8")
 
 
 async def ensure_public_host(host: str) -> None:
@@ -58,17 +97,52 @@ async def ensure_public_host(host: str) -> None:
             raise FetchError("Links to private or local network addresses are not allowed")
 
 
+class PublicOnlyResolver(AbstractResolver):
+    """Resolve host names and hand only validated public addresses to the connector.
+
+    Validating inside the connector's resolver (instead of in a separate check
+    before connecting) closes the DNS-rebinding window: the socket is opened to
+    the very address that passed the check.
+    """
+
+    def __init__(self) -> None:
+        self._inner = aiohttp.ThreadedResolver()
+
+    async def resolve(
+        self, host: str, port: int = 0, family: socket.AddressFamily = socket.AF_INET
+    ) -> list[ResolveResult]:
+        try:
+            infos = await self._inner.resolve(host, port, family)
+        except OSError as exc:
+            raise OSError(f"Cannot resolve host {host}") from exc
+        for info in infos:
+            if not ipaddress.ip_address(info["host"]).is_global:
+                raise OSError("Links to private or local network addresses are not allowed")
+        return list(infos)
+
+    async def close(self) -> None:
+        await self._inner.close()
+
+
 class Fetcher:
+    """The one shared downloader: validated, size/time-limited, cached and polite."""
+
     def __init__(
         self,
         *,
         max_bytes: int = 5_000_000,
         timeout_seconds: float = 20,
         allow_private: bool = False,
+        cache_seconds: float = 120,
+        max_concurrency: int = 4,
     ) -> None:
         self.max_bytes = max_bytes
         self.timeout = aiohttp.ClientTimeout(total=timeout_seconds)
         self.allow_private = allow_private
+        self.cache_seconds = cache_seconds
+        self._cache: dict[str, tuple[float, bytes]] = {}
+        self.max_concurrency = max_concurrency
+        self._slots = asyncio.Semaphore(max_concurrency)
         self._session: aiohttp.ClientSession | None = None
 
     async def __aenter__(self) -> Fetcher:
@@ -84,8 +158,13 @@ class Fetcher:
 
     def _client(self) -> aiohttp.ClientSession:
         if self._session is None or self._session.closed:
+            connector = aiohttp.TCPConnector(
+                resolver=None if self.allow_private else PublicOnlyResolver(),
+                limit=self.max_concurrency,
+                limit_per_host=2,
+            )
             self._session = aiohttp.ClientSession(
-                timeout=self.timeout, headers={"User-Agent": USER_AGENT}
+                timeout=self.timeout, headers={"User-Agent": USER_AGENT}, connector=connector
             )
         return self._session
 
@@ -93,6 +172,18 @@ class Fetcher:
         if url == DEMO_URL:
             return demo_calendar()
         current = normalize_url(url)
+        cached = self._cache.get(current)
+        if cached is not None and time.monotonic() - cached[0] < self.cache_seconds:
+            return cached[1]
+        async with self._slots:
+            data = await self._download(current)
+        if self.cache_seconds > 0:
+            if len(self._cache) >= 256:
+                self._cache.pop(next(iter(self._cache)))
+            self._cache[current] = (time.monotonic(), data)
+        return data
+
+    async def _download(self, current: str) -> bytes:
         for _ in range(MAX_REDIRECTS + 1):
             host = urlsplit(current).hostname
             assert host is not None
@@ -109,6 +200,11 @@ class Fetcher:
                     if response.status != 200:
                         raise FetchError(f"The server answered HTTP {response.status}")
                     return await self._read(response)
+            except aiohttp.ClientConnectorError as exc:
+                reason = str(exc.os_error)
+                if "not allowed" in reason or "Cannot resolve" in reason:
+                    raise FetchError(reason) from exc
+                raise FetchError("Download failed: ClientConnectorError") from exc
             except (aiohttp.ClientError, TimeoutError) as exc:
                 raise FetchError(f"Download failed: {type(exc).__name__}") from exc
         raise FetchError("Too many redirects")
