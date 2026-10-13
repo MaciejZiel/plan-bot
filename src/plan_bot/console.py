@@ -47,7 +47,9 @@ async def run_console(
                     stdout.write("> ")
                     continue
                 reply = await app.router.handle_text(CONSOLE_CHAT, line)
-                stdout.write(("Commands start with '/'. Try /help" if reply is None else reply) + "\n> ")
+                stdout.write(
+                    ("Commands start with '/'. Try /help" if reply is None else reply) + "\n> "
+                )
                 stdout.flush()
         finally:
             stop.set()

@@ -84,5 +84,6 @@ async def test_rate_limit_throttles_once_then_stays_quiet(
 async def test_feed_commands_cost_more(service: BotService) -> None:
     limiter = RateLimiter(burst=5, per_minute=1, clock=lambda: 0.0)
     router = CommandRouter(service, limiter=limiter)
-    assert "Timetable saved" in await router.handle(CHAT, "demo")  # cost 4
-    assert "Slow down" in await router.handle(CHAT, "demo")  # only 1 token left
+    assert "Slow down" not in await router.handle(CHAT, "subscribe", "ftp://x")  # cost 4
+    assert "Slow down" in await router.handle(CHAT, "subscribe", "ftp://x")  # 1 token left
+    assert "Timetable saved" in await router.handle(CHAT, "demo")  # the demo costs just 1

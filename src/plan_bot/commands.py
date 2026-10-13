@@ -14,7 +14,8 @@ from plan_bot.service import BotService, NoFeedError, UserError
 log = logging.getLogger(__name__)
 
 #: Commands that download a feed cost extra rate-limit tokens.
-HEAVY_COMMANDS = frozenset({"subscribe", "setfeed", "demo", "refresh"})
+#: The bundled demo never touches the network, so it costs a normal command.
+HEAVY_COMMANDS = frozenset({"subscribe", "refresh"})
 HEAVY_COST = 4
 
 
