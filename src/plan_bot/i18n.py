@@ -333,6 +333,93 @@ _M: dict[str, dict[str, str]] = {
     },
     "ch.moved": {"en": "moved to {day}{span}", "pl": "przeniesione na {day}{span}"},
     "ch.room": {"en": "room {old} → {new}", "pl": "sala {old} → {new}"},
+    "remind_current": {
+        "en": "Reminders are on, {delta} before each class.",
+        "pl": "Przypomnienia włączone, {delta} przed każdymi zajęciami.",
+    },
+    # ------------------------------------------------------------------ Discord
+    "dc.room": {"en": "Room", "pl": "Sala"},
+    "dc.teacher": {"en": "Teacher", "pl": "Prowadzący"},
+    "dc.groups": {"en": "Groups", "pl": "Grupy"},
+    "dc.when": {"en": "When", "pl": "Kiedy"},
+    "dc.next": {"en": "Next class", "pl": "Następne zajęcia"},
+    "dc.in_progress": {"en": "In progress now", "pl": "Trwa teraz"},
+    "dc.reminder": {"en": "Reminder", "pl": "Przypomnienie"},
+    "dc.cancelled": {"en": "Cancelled", "pl": "Odwołane"},
+    "dc.ends": {"en": "ends", "pl": "koniec"},
+    "dc.starts": {"en": "starts", "pl": "start"},
+    "dc.more": {"en": "... and {n} more", "pl": "... i jeszcze {n}"},
+    "dc.footer": {
+        "en": "Times in {tz} · /help for all commands",
+        "pl": "Czas: {tz} · /help pokazuje wszystkie komendy",
+    },
+    "dc.dm_hint": {
+        "en": (
+            "Reminders arrive as direct messages. Allow DMs from this server's members "
+            "(Privacy Settings), otherwise I cannot reach you."
+        ),
+        "pl": (
+            "Przypomnienia przychodzą w wiadomościach prywatnych. Zezwól na DM od członków "
+            "serwera (Ustawienia prywatności), inaczej nie dotrę do Ciebie."
+        ),
+    },
+    "dc.help_title": {"en": "plan-bot: your timetable", "pl": "plan-bot: Twój plan zajęć"},
+    "dc.help_ask": {
+        "en": (
+            "You can also just write to me (or mention me in a server): "
+            '"what\'s next?", "today", "tomorrow", "week", "remind me 30 min before".'
+        ),
+        "pl": (
+            "Możesz też po prostu do mnie napisać (albo wspomnieć mnie na serwerze): "
+            '"kiedy mam następne zajęcia?", "co mam jutro", "plan na tydzień", '
+            '"przypomnij 30 min przed".'
+        ),
+    },
+    "dc.privacy": {
+        "en": "Your timetable belongs to you, not to the channel: answers are visible only to you.",
+        "pl": "Plan należy do Ciebie, nie do kanału: odpowiedzi widzisz tylko Ty.",
+    },
+    "nl.unknown": {
+        "en": (
+            "I did not get that. I can show your timetable: ask for the next class, today, "
+            "tomorrow or the week, or use the buttons below. /help lists all commands."
+        ),
+        "pl": (
+            "Nie rozumiem. Mogę pokazać Twój plan: zapytaj o następne zajęcia, dzisiaj, jutro "
+            "albo tydzień, albo użyj przycisków. /help pokazuje wszystkie komendy."
+        ),
+    },
+    "dc.subscribe_title": {"en": "Your timetable link", "pl": "Link do Twojego planu"},
+    "dc.subscribe_label": {"en": "ICS / iCal link", "pl": "Link ICS / iCal"},
+    "dc.link_warning": {
+        "en": (
+            "The link was visible in the channel. Next time run /subscribe without a link: "
+            "a private form opens."
+        ),
+        "pl": (
+            "Link był widoczny na kanale. Następnym razem użyj /subscribe bez linku: "
+            "otworzy się prywatny formularz."
+        ),
+    },
+    "dc.forget_confirm": {
+        "en": "This deletes your timetable link, settings and stored classes. Confirm?",
+        "pl": "To usunie link do planu, ustawienia i zapisane zajęcia. Potwierdzasz?",
+    },
+    "dc.forget_yes": {"en": "Yes, delete everything", "pl": "Tak, usuń wszystko"},
+    "choice.this_week": {"en": "This week", "pl": "Ten tydzień"},
+    "choice.next_week": {"en": "Next week", "pl": "Przyszły tydzień"},
+    "choice.on": {"en": "On", "pl": "Włączone"},
+    "choice.off": {"en": "Off", "pl": "Wyłączone"},
+    "cmd.remind_set": {
+        "en": "Remind me N minutes before each class",
+        "pl": "Przypomnij mi N minut przed każdymi zajęciami",
+    },
+    "cmd.remind_list": {"en": "Show the current reminder", "pl": "Pokaż obecne przypomnienie"},
+    "cmd.remind_off": {"en": "Turn reminders off", "pl": "Wyłącz przypomnienia"},
+    "arg.remind_minutes": {
+        "en": "Minutes before class (1-1440)",
+        "pl": "Minuty przed zajęciami (1-1440)",
+    },
 }
 
 
