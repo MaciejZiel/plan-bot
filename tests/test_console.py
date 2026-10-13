@@ -14,7 +14,7 @@ from tests.conftest import warsaw
 
 
 async def test_console_session(settings: Settings) -> None:
-    stdin = io.StringIO("/setfeed demo\n\n/today\nhello\n")
+    stdin = io.StringIO("/demo\n\n/today\nhello\n")
     stdout = io.StringIO()
     await run_console(settings, start_at=warsaw(2026, 10, 12, 7), stdin=stdin, stdout=stdout)
     out = stdout.getvalue()

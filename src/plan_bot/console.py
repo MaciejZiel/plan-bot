@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import TextIO
 
 from plan_bot.app import build_app, shifted_clock
-from plan_bot.commands import INTRO
+from plan_bot.commands import intro_text
 from plan_bot.config import Settings
 from plan_bot.repository import ChatRef
 
@@ -36,7 +36,7 @@ async def run_console(
     async with build_app(settings, ConsoleNotifier(stdout), clock=clock) as app:
         stop = asyncio.Event()
         scheduler = asyncio.create_task(app.scheduler.run(stop))
-        stdout.write(f"{INTRO}\nType /help for commands, Ctrl+D to quit.\n> ")
+        stdout.write(f"{intro_text()}\nType /help for commands, Ctrl+D to quit.\n> ")
         stdout.flush()
         try:
             while True:
