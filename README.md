@@ -1,14 +1,20 @@
 # plan-bot
 
+**Your university timetable, answered in the chat you already use.**
+
+**[Add the bot to Discord](https://discord.com/oauth2/authorize?client_id=1559599102084521994&scope=bot+applications.commands&permissions=84992)** · [Status](https://status.maciejzielinski.dev) · [Portfolio](https://maciejzielinski.dev)
+
+Try it now: run `/demo` for a fictional sample timetable, or `/subscribe` with an `.ics` file or a link to your own.
+
 [![CI](https://github.com/MaciejZiel/plan-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/MaciejZiel/plan-bot/actions/workflows/ci.yml)
 ![Python 3.12 | 3.14](https://img.shields.io/badge/python-3.12%20%7C%203.14-3776ab)
 ![Coverage 98%](https://img.shields.io/badge/coverage-98%25-brightgreen)
 ![Ruff + mypy strict](https://img.shields.io/badge/lint-ruff%20%2B%20mypy%20strict-informational)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-**Your university timetable, answered in the chat you already use.** plan-bot reads any timetable
-published as an iCalendar (ICS) link and gives students on **Discord** (slash commands, embeds,
-buttons, plain questions) and **Telegram**:
+plan-bot reads any timetable
+published as an iCalendar (ICS) link or exported as an `.ics` file and gives students on
+**Discord** (slash commands, embeds, buttons, plain questions) and **Telegram**:
 
 - **English and Polish**: the language follows your Discord or Telegram app on first contact,
   `/lang en|pl` overrides it
