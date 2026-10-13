@@ -64,6 +64,7 @@ class Subscription(Base):
     platform: Mapped[str] = mapped_column(String(16))
     chat_id: Mapped[str] = mapped_column(String(64))
     ics_url: Mapped[str | None] = mapped_column(Text, default=None)
+    language: Mapped[str] = mapped_column(String(8), default="en", server_default="en")
     group_filter: Mapped[str] = mapped_column(String(255), default="")
     reminder_minutes: Mapped[int] = mapped_column(Integer, default=15)
     notify_changes: Mapped[bool] = mapped_column(Boolean, default=True)
