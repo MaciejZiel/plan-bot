@@ -479,7 +479,7 @@ uv run pytest --cov               # fails under 85 % coverage
 uv run python scripts/render_demo_chats.py docs/screenshots   # regenerate the demo mock-ups
 ```
 
-The suite has **220 tests** with **98% line coverage** (CI fails below 85%) and runs in about
+The suite has **371 tests** with **98% line coverage** (CI fails below 85%) and runs in about
 ten seconds. All tests use fictional fixtures (`tests/fixtures/*.ics` and the bundled sample).
 They cover:
 
@@ -489,7 +489,10 @@ They cover:
   UTC and floating times
 - a feed before and after edits
 - a fake Telegram Bot API server (commands, inline-button callbacks, concurrent chats, blocked
-  users) and the Discord slash-command callbacks
+  users)
+- the Discord adapter against fakes of interactions, messages and channels (slash commands and
+  their localisation, embeds, buttons, DMs and mentions, closed DMs, deleted channels) and a
+  Polish/English table test of the free-text matcher
 - races: per-chat ordering under random delays, one busy chat versus the shared slots, and
   background jobs meeting `/forget` or a feed switch half-way
 - hostile feeds (sub-daily and impossible rules, too many lessons) and SSRF address forms
