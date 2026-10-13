@@ -1,6 +1,6 @@
 [project]
 name = "plan-bot"
-version = "0.1.0"
+version = "0.2.0"
 description = "Telegram + Discord bot for university timetables published as iCalendar (ICS) feeds"
 readme = "README.md"
 license = "MIT"
