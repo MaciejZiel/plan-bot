@@ -14,6 +14,8 @@ from urllib.parse import urljoin, urlsplit, urlunsplit
 import aiohttp
 from aiohttp.abc import AbstractResolver, ResolveResult
 
+from plan_bot.i18n import tr
+
 DEMO_URL = "demo"
 MAX_REDIRECTS = 5
 MAX_URL_LENGTH = 2048
@@ -26,7 +28,19 @@ _ICS_DATE = re.compile(r"(?<![0-9])(20\d{2})(\d{2})(\d{2})(?=T\d{6}|(?![0-9]))")
 
 
 class FetchError(Exception):
-    """The feed could not be downloaded; the message is safe to show to users."""
+    """The feed could not be downloaded; the message is safe to show to users.
+
+    ``key`` and ``params`` identify the message in :mod:`plan_bot.i18n`, so the
+    chat can show it in the user's language; ``str(error)`` is the English text.
+    """
+
+    def __init__(self, key: str, **params: object) -> None:
+        super().__init__(tr("en", key, **params))
+        self.key = key
+        self.params = params
+
+    def localized(self, lang: str) -> str:
+        return tr(lang, self.key, **self.params)
 
 
 def normalize_url(raw: str) -> str:
@@ -36,22 +50,22 @@ def normalize_url(raw: str) -> str:
     if url.lower().startswith("webcal://"):
         url = "https://" + url[len("webcal://") :]
     if len(url) > MAX_URL_LENGTH:
-        raise FetchError("The link is too long")
+        raise FetchError("url.too_long")
     if any(ord(ch) < 33 or ord(ch) == 127 for ch in url):
-        raise FetchError("The link contains spaces or control characters")
+        raise FetchError("url.chars")
     try:
         parts = urlsplit(url)
         port = parts.port  # raises ValueError for a malformed port
     except ValueError as exc:
-        raise FetchError("The link is not a valid URL") from exc
+        raise FetchError("url.invalid") from exc
     if parts.scheme not in {"http", "https"}:
-        raise FetchError("The link must start with https://, http:// or webcal://")
+        raise FetchError("url.scheme")
     if not parts.hostname:
-        raise FetchError("The link has no host name")
+        raise FetchError("url.no_host")
     if parts.username is not None or parts.password is not None:
-        raise FetchError("Links with a user name or password are not supported")
+        raise FetchError("url.credentials")
     if port == 0:
-        raise FetchError("The link is not a valid URL")
+        raise FetchError("url.invalid")
     return urlunsplit(parts)
 
 
@@ -90,11 +104,19 @@ async def ensure_public_host(host: str) -> None:
     try:
         infos = await loop.getaddrinfo(host, None, type=socket.SOCK_STREAM)
     except OSError as exc:
-        raise FetchError(f"Cannot resolve host {host}") from exc
+        raise FetchError("fetch.resolve", host=host) from exc
     for info in infos:
         address = ipaddress.ip_address(info[4][0])
         if not address.is_global:
-            raise FetchError("Links to private or local network addresses are not allowed")
+            raise FetchError("fetch.private")
+
+
+class PublicOnlyError(OSError):
+    """Raised by the resolver; carries the :class:`FetchError` to report."""
+
+    def __init__(self, key: str, **params: object) -> None:
+        super().__init__(key)
+        self.error = FetchError(key, **params)
 
 
 class PublicOnlyResolver(AbstractResolver):
@@ -114,10 +136,10 @@ class PublicOnlyResolver(AbstractResolver):
         try:
             infos = await self._inner.resolve(host, port, family)
         except OSError as exc:
-            raise OSError(f"Cannot resolve host {host}") from exc
+            raise PublicOnlyError("fetch.resolve", host=host) from exc
         for info in infos:
             if not ipaddress.ip_address(info["host"]).is_global:
-                raise OSError("Links to private or local network addresses are not allowed")
+                raise PublicOnlyError("fetch.private")
         return list(infos)
 
     async def close(self) -> None:
@@ -194,30 +216,29 @@ class Fetcher:
                     if response.status in {301, 302, 303, 307, 308}:
                         location = response.headers.get("Location")
                         if not location:
-                            raise FetchError("Redirect without a target")
+                            raise FetchError("fetch.redirect")
                         current = normalize_url(urljoin(current, location))
                         continue
                     if response.status != 200:
-                        raise FetchError(f"The server answered HTTP {response.status}")
+                        raise FetchError("fetch.http", status=response.status)
                     return await self._read(response)
             except aiohttp.ClientConnectorError as exc:
-                reason = str(exc.os_error)
-                if "not allowed" in reason or "Cannot resolve" in reason:
-                    raise FetchError(reason) from exc
-                raise FetchError("Download failed: ClientConnectorError") from exc
+                if isinstance(exc.os_error, PublicOnlyError):
+                    raise exc.os_error.error from exc
+                raise FetchError("fetch.failed", kind="ClientConnectorError") from exc
             except (aiohttp.ClientError, TimeoutError) as exc:
-                raise FetchError(f"Download failed: {type(exc).__name__}") from exc
-        raise FetchError("Too many redirects")
+                raise FetchError("fetch.failed", kind=type(exc).__name__) from exc
+        raise FetchError("fetch.redirects")
 
     async def _read(self, response: aiohttp.ClientResponse) -> bytes:
         length = response.content_length
         if length is not None and length > self.max_bytes:
-            raise FetchError("The calendar file is too large")
+            raise FetchError("fetch.too_large")
         chunks: list[bytes] = []
         size = 0
         async for chunk in response.content.iter_chunked(64 * 1024):
             size += len(chunk)
             if size > self.max_bytes:
-                raise FetchError("The calendar file is too large")
+                raise FetchError("fetch.too_large")
             chunks.append(chunk)
         return b"".join(chunks)

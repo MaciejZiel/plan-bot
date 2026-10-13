@@ -182,7 +182,7 @@ async def test_resolver_pins_only_public_addresses(monkeypatch: pytest.MonkeyPat
 
     monkeypatch.setattr(resolver._inner, "resolve", fake)
     assert (await resolver.resolve("good.example", 443))[0]["host"] == "93.184.215.14"
-    with pytest.raises(OSError, match="not allowed"):
+    with pytest.raises(OSError, match=r"fetch\.private"):
         await resolver.resolve("rebind.example", 443)  # one private answer poisons the host
     await resolver.close()
 
