@@ -24,6 +24,10 @@ USER_AGENT = "plan-bot/0.2 (+https://github.com/MaciejZiel/plan-bot)"
 #: weeks once it has expired, so a stranger always sees classes this week.
 DEMO_ANCHOR = date(2026, 10, 5)
 DEMO_VALID_UNTIL = date(2027, 1, 10)
+#: Upper bound on cached feed bytes, so many large feeds cannot exhaust memory.
+MAX_CACHE_BYTES = 32_000_000
+_NAT64 = ipaddress.ip_network("64:ff9b::/96")
+_IPV4_COMPATIBLE = ipaddress.ip_network("::/96")
 _ICS_DATE = re.compile(r"(?<![0-9])(20\d{2})(\d{2})(\d{2})(?=T\d{6}|(?![0-9]))")
 
 
@@ -98,6 +102,25 @@ def demo_calendar(today: date | None = None) -> bytes:
     return _ICS_DATE.sub(move, raw.decode("utf-8")).encode("utf-8")
 
 
+def is_public_address(address: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    """True only for unicast addresses on the public internet.
+
+    Besides :attr:`~ipaddress.IPv4Address.is_global` this rejects multicast and
+    IPv6 forms that embed an IPv4 address (IPv4-mapped, IPv4-compatible and the
+    NAT64 well-known prefix) unless the embedded address is public itself.
+    """
+    if not address.is_global or address.is_multicast:
+        return False
+    if isinstance(address, ipaddress.IPv6Address):
+        if address.ipv4_mapped is not None:
+            return is_public_address(address.ipv4_mapped)
+        if address in _IPV4_COMPATIBLE:
+            return False
+        if address in _NAT64:
+            return is_public_address(ipaddress.IPv4Address(int(address) & 0xFFFFFFFF))
+    return True
+
+
 async def ensure_public_host(host: str) -> None:
     """Reject hosts resolving to loopback, private, link-local or reserved ranges."""
     loop = asyncio.get_running_loop()
@@ -107,7 +130,7 @@ async def ensure_public_host(host: str) -> None:
         raise FetchError("fetch.resolve", host=host) from exc
     for info in infos:
         address = ipaddress.ip_address(info[4][0])
-        if not address.is_global:
+        if not is_public_address(address):
             raise FetchError("fetch.private")
 
 
@@ -138,7 +161,7 @@ class PublicOnlyResolver(AbstractResolver):
         except OSError as exc:
             raise PublicOnlyError("fetch.resolve", host=host) from exc
         for info in infos:
-            if not ipaddress.ip_address(info["host"]).is_global:
+            if not is_public_address(ipaddress.ip_address(info["host"])):
                 raise PublicOnlyError("fetch.private")
         return list(infos)
 
@@ -159,10 +182,12 @@ class Fetcher:
         max_concurrency: int = 4,
     ) -> None:
         self.max_bytes = max_bytes
+        self.timeout_seconds = timeout_seconds
         self.timeout = aiohttp.ClientTimeout(total=timeout_seconds)
         self.allow_private = allow_private
         self.cache_seconds = cache_seconds
         self._cache: dict[str, tuple[float, bytes]] = {}
+        self._cache_bytes = 0
         self.max_concurrency = max_concurrency
         self._slots = asyncio.Semaphore(max_concurrency)
         self._session: aiohttp.ClientSession | None = None
@@ -198,12 +223,35 @@ class Fetcher:
         if cached is not None and time.monotonic() - cached[0] < self.cache_seconds:
             return cached[1]
         async with self._slots:
-            data = await self._download(current)
+            try:
+                # One deadline for the whole download, redirects included, so a
+                # slow server cannot hold a slot for (redirects + 1) timeouts.
+                async with asyncio.timeout(self.timeout_seconds):
+                    data = await self._download(current)
+            except TimeoutError as exc:
+                raise FetchError("fetch.failed", kind="TimeoutError") from exc
         if self.cache_seconds > 0:
-            if len(self._cache) >= 256:
-                self._cache.pop(next(iter(self._cache)))
-            self._cache[current] = (time.monotonic(), data)
+            self._remember(current, data)
         return data
+
+    def _remember(self, url: str, data: bytes) -> None:
+        """Cache ``data``, dropping expired and then oldest entries to stay within budget."""
+        now = time.monotonic()
+        self._forget(url)
+        for key in [k for k, (at, _) in self._cache.items() if now - at >= self.cache_seconds]:
+            self._forget(key)
+        while self._cache and (
+            len(self._cache) >= 256 or self._cache_bytes + len(data) > MAX_CACHE_BYTES
+        ):
+            self._forget(next(iter(self._cache)))
+        if len(data) <= MAX_CACHE_BYTES:
+            self._cache[url] = (now, data)
+            self._cache_bytes += len(data)
+
+    def _forget(self, url: str) -> None:
+        entry = self._cache.pop(url, None)
+        if entry is not None:
+            self._cache_bytes -= len(entry[1])
 
     async def _download(self, current: str) -> bytes:
         for _ in range(MAX_REDIRECTS + 1):
