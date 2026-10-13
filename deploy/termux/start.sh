@@ -16,7 +16,7 @@ set -a
 set +a
 
 if [ -z "${TELEGRAM_BOT_TOKEN:-}" ] && [ -z "${DISCORD_BOT_TOKEN:-}" ]; then
-  echo "set TELEGRAM_BOT_TOKEN in $ENV_FILE" >&2
+  echo "set DISCORD_BOT_TOKEN (or TELEGRAM_BOT_TOKEN) in $ENV_FILE" >&2
   exit 1
 fi
 
