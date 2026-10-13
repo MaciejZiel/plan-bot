@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from plan_bot.domain import Lesson
-from plan_bot.ics import DEFAULT_DURATION, IcsError, Window, expand
+from plan_bot.ics import DEFAULT_DURATION, FeedTooComplex, Window, expand
 from tests.conftest import WARSAW, fixture_bytes, warsaw
 
 LESSONS = expand(
@@ -111,12 +111,12 @@ def test_long_running_daily_series_still_expands() -> None:
 
 
 def test_too_many_lessons_are_refused() -> None:
-    with pytest.raises(IcsError, match="more than"):
+    with pytest.raises(FeedTooComplex, match="more than"):
         expand(_calendar("FREQ=DAILY", "20261005T080000", events=200), HOSTILE_WINDOW, WARSAW)
 
 
 def test_expansion_has_a_time_budget() -> None:
     # Impossible rules make dateutil scan up to the year 9999 without yielding.
     data = _calendar("FREQ=DAILY;BYMONTH=2;BYMONTHDAY=31", "20260105T080000", events=5)
-    with pytest.raises(IcsError, match="too complex"):
+    with pytest.raises(FeedTooComplex, match="too complex"):
         expand(data, HOSTILE_WINDOW, WARSAW, seconds=0.5)

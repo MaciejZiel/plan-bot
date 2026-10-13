@@ -249,6 +249,10 @@ _M: dict[str, dict[str, str]] = {
         "en": "Could not download the timetable: {error}",
         "pl": "Nie udało się pobrać planu: {error}",
     },
+    "too_complex": {
+        "en": "That timetable is too large or too complex for this bot.",
+        "pl": "Ten plan jest zbyt duży lub zbyt skomplikowany dla tego bota.",
+    },
     "not_ics": {
         "en": "That link does not return an iCalendar file ({error}).",
         "pl": "Ten link nie zwraca pliku iCalendar ({error}).",

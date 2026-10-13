@@ -29,7 +29,7 @@ from plan_bot.formatting import (
     humanize,
 )
 from plan_bot.i18n import DEFAULT_LANG, LANGS, normalize_lang, tr
-from plan_bot.ics import IcsError, Window, expand
+from plan_bot.ics import FeedTooComplex, IcsError, Window, expand
 from plan_bot.repository import ChatRef, Repository
 from plan_bot.timetable import (
     group_names,
@@ -411,6 +411,8 @@ class BotService:
                 return await asyncio.to_thread(expand, data, self._window(now), self.tz)
         except FetchError as exc:
             raise UserError(tr(lang, "download_failed", error=exc.localized(lang))) from exc
+        except FeedTooComplex as exc:
+            raise UserError(tr(lang, "too_complex")) from exc
         except IcsError as exc:
             raise UserError(tr(lang, "not_ics", error=exc)) from exc
 

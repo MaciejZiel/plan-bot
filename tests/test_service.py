@@ -394,3 +394,20 @@ async def test_logs_use_a_keyed_pseudonym_instead_of_the_chat_id(
     logged = [r for r in caplog.records if r.getMessage() == "chat unavailable, deleting its data"]
     assert [r.__dict__["chat"] for r in logged] == [tag]
     assert CHAT.chat_id not in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("lang", "text"), [("en", "too large or too complex"), ("pl", "zbyt duży")]
+)
+async def test_oversized_feed_gets_its_own_message(
+    service: BotService, feeds: FakeFeeds, repo: Repository, lang: str, text: str
+) -> None:
+    events = "".join(
+        f"BEGIN:VEVENT\r\nUID:d{i}\r\nDTSTART:20261005T080000Z\r\nRRULE:FREQ=DAILY\r\n"
+        "END:VEVENT\r\n"
+        for i in range(200)
+    )
+    feeds.payloads[URL] = f"BEGIN:VCALENDAR\r\n{events}END:VCALENDAR\r\n".encode()
+    await repo.update(CHAT, language=lang)
+    with pytest.raises(UserError, match=text):
+        await service.set_feed(CHAT, URL)

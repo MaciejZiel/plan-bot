@@ -43,6 +43,10 @@ class IcsError(ValueError):
     """The document is not a usable iCalendar feed."""
 
 
+class FeedTooComplex(IcsError):
+    """The feed is valid but too big or too slow to expand (see the limits above)."""
+
+
 class _Budget:
     """Aborts the expansion of a feed that is too big or too slow to expand."""
 
@@ -51,7 +55,7 @@ class _Budget:
 
     def check(self) -> None:
         if clock.monotonic() > self.deadline:
-            raise IcsError("the feed is too complex to expand")
+            raise FeedTooComplex("the feed is too complex to expand")
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,7 +116,7 @@ def expand(
         series = _expand_series(uid, master, overrides.pop(uid, []), window, default_tz, budget)
         lessons.extend(series)
         if len(lessons) > MAX_LESSONS:
-            raise IcsError(f"the feed has more than {MAX_LESSONS} classes in the next months")
+            raise FeedTooComplex(f"more than {MAX_LESSONS} classes in the next months")
 
     # Overrides whose master is missing (or was not recurring) still describe a class.
     for uid, orphans in overrides.items():
@@ -125,7 +129,7 @@ def expand(
                 lessons.append(lesson)
 
     if len(lessons) > MAX_LESSONS:
-        raise IcsError(f"the feed has more than {MAX_LESSONS} classes in the next months")
+        raise FeedTooComplex(f"more than {MAX_LESSONS} classes in the next months")
     lessons.sort(key=lambda les: (les.start, les.summary, les.key))
     return _unique_keys(lessons)
 
