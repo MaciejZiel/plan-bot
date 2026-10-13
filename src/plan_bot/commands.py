@@ -79,6 +79,8 @@ class Reply:
     view: View | None = None
     #: Language the reply is written in.
     lang: str = DEFAULT_LANG
+    #: The welcome/help answer (Discord renders it as a richer embed).
+    intro: bool = False
 
 
 def intro_text(lang: str = DEFAULT_LANG) -> str:
@@ -221,7 +223,7 @@ class CommandRouter:
             rows = (*menu_buttons(lang), language_row())
         else:
             rows = ((Button(tr(lang, "btn.demo"), "/demo"),), language_row())
-        return Reply(text, rows)
+        return Reply(text, rows, intro=True)
 
     async def _buttons_after(
         self, chat: ChatRef, name: str, lang: str

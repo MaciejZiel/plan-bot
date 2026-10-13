@@ -89,3 +89,10 @@ def test_serving_and_logging_settings() -> None:
 def test_serving_and_logging_validation(env: dict[str, str]) -> None:
     with pytest.raises(ConfigError):
         Settings.from_env(env)
+
+
+def test_discord_dev_guild_prefers_the_new_name() -> None:
+    assert Settings.from_env({"DISCORD_GUILD_ID": "5"}).discord_guild_id == 5
+    both = {"DISCORD_GUILD_ID": "5", "DISCORD_DEV_GUILD_ID": "7"}
+    assert Settings.from_env(both).discord_guild_id == 7
+    assert Settings.from_env({}).discord_guild_id is None
