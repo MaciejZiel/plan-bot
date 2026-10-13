@@ -408,12 +408,12 @@ _M: dict[str, dict[str, str]] = {
     "dc.subscribe_label": {"en": "ICS / iCal link", "pl": "Link ICS / iCal"},
     "dc.link_warning": {
         "en": (
-            "The link was visible in the channel. Next time run /subscribe without a link: "
-            "a private form opens."
+            "Everybody in this channel can see the link you posted; consider deleting your "
+            "message. Next time send it in a DM or use /subscribe: only you see that."
         ),
         "pl": (
-            "Link był widoczny na kanale. Następnym razem użyj /subscribe bez linku: "
-            "otworzy się prywatny formularz."
+            "Wszyscy na tym kanale widzą wysłany link; rozważ usunięcie wiadomości. "
+            "Następnym razem wyślij go w DM albo użyj /subscribe: to widzisz tylko Ty."
         ),
     },
     "dc.forget_confirm": {

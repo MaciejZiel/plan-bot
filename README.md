@@ -294,8 +294,9 @@ Consequences:
   interactions), so the channel sees a short note and the answer, which is personal, goes to the
   author **by DM**. If their DMs are closed, the note points to the slash commands instead.
   Help and the "I did not get that" hint are not personal and are answered in the channel.
-- `/subscribe` without a link opens a private form, because a link typed as a slash command
-  option is visible to everybody in the channel. If someone does it anyway, the bot says so.
+- `/subscribe` without a link opens a form; with a link the answer is ephemeral, and so is the
+  "used /subscribe" line that shows the option, so nobody else sees the link either way. A link
+  **posted as a message** after a mention is public, so the bot suggests deleting it.
 
 ### Intents
 
@@ -438,8 +439,8 @@ The public Discord bot has a short [privacy policy](PRIVACY.md) and [terms](TERM
 - Message contents are never stored. Only commands and, on Discord, DMs and mentions addressed to
   the bot are processed, and the text is used only to pick a command. The bot needs no
   message-content intent.
-- A feed link typed as a slash command option is visible to the channel: use `/subscribe` without
-  a link (private form) or a DM with the bot.
+- A feed link posted as a normal message in a server is visible to the channel: use `/subscribe`
+  (private answer) or a DM with the bot.
 
 ## Key decisions
 

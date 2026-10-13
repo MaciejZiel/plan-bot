@@ -310,7 +310,9 @@ class DiscordAdapter:
                 lang = lang_for_locale(str(interaction.locale))
                 await interaction.response.send_modal(SubscribeModal(self, lang))
                 return
-            await self.respond(interaction, "subscribe", url, link_in_channel=True)
+            # The answer is ephemeral outside the user's DM with the bot, and so is the
+            # "used /subscribe url:..." line above it: nobody else sees the link.
+            await self.respond(interaction, "subscribe", url)
 
         callback: Callable[..., Coroutine[Any, Any, None]] = app_commands.describe(
             url=self._description("arg.subscribe")
@@ -375,11 +377,8 @@ class DiscordAdapter:
         interaction: discord.Interaction[Any],
         name: str,
         arg: str | None,
-        *,
-        link_in_channel: bool = False,
     ) -> None:
         """Answer a slash command or button press from the caller's own timetable."""
-        in_server = interaction.guild_id is not None
         # Downloading a feed can take longer than Discord's 3 s answer deadline.
         await interaction.response.defer(thinking=True, ephemeral=is_private(interaction))
         chat = user_chat(interaction.user.id)
@@ -390,8 +389,6 @@ class DiscordAdapter:
             await self._discard(interaction)
             return
         messages = self._present(reply)
-        if link_in_channel and in_server and name == "subscribe":
-            messages.append([discord.Embed(description=tr(reply.lang, "dc.link_warning"))])
         await self._say(interaction, messages[-1], extra=messages[:-1], rows=reply.buttons)
 
     @staticmethod

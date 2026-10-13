@@ -392,13 +392,11 @@ async def test_subscribe_without_a_link_opens_a_private_form(adapter: DiscordAda
     assert submit.followup.sent[0]["ephemeral"] is True
 
 
-async def test_subscribe_with_a_link_in_a_server_warns_that_it_was_visible(
-    adapter: DiscordAdapter,
-) -> None:
+async def test_subscribe_with_a_link_answers_privately(adapter: DiscordAdapter) -> None:
     server = await slash(adapter, "subscribe", "demo")
-    first, last = server.followup.sent
-    assert "Timetable saved" in texts(first["embeds"])
-    assert "visible in the channel" in texts(last["embeds"])
+    assert server.response.deferred == {"thinking": True, "ephemeral": True}
+    (saved,) = server.followup.sent
+    assert "Timetable saved" in texts(saved["embeds"])
     dm = await slash(adapter, "subscribe", "demo", guild_id=None, user_id=5)
     assert len(dm.followup.sent) == 1
 
@@ -685,7 +683,7 @@ async def test_a_link_in_a_message_subscribes_and_warns_in_servers(
     assert router.calls[0][1:3] == ("subscribe", "https://uni.example/a.ics")
     assert "Timetable saved" in texts(linked.dms[0]["embeds"])
     (note,) = linked.replies
-    assert "visible in the channel" in texts(note["embeds"])
+    assert "can see the link you posted" in texts(note["embeds"])
 
 
 async def test_silent_replies_send_nothing(service: BotService) -> None:
