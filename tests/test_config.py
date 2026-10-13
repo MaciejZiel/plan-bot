@@ -57,3 +57,35 @@ def test_invalid(env: dict[str, str]) -> None:
 def test_reads_os_environ(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("PLAN_BOT_TICK_SECONDS", "5")
     assert Settings.from_env().tick_seconds == 5
+
+
+def test_serving_and_logging_settings() -> None:
+    settings = Settings.from_env(
+        {
+            "PLAN_BOT_HEALTH_PORT": "8091",
+            "PLAN_BOT_BASE_PATH": "plan-bot/",
+            "PLAN_BOT_LOG_FORMAT": "JSON",
+            "PLAN_BOT_RATE_BURST": "3",
+        }
+    )
+    assert (settings.health_port, settings.base_path) == (8091, "/plan-bot")
+    assert settings.log_format == "json"
+    assert settings.rate_burst == 3
+    assert Settings.from_env({"PLAN_BOT_BASE_PATH": "/"}).base_path == ""
+    assert Settings.from_env({}).health_port == 0  # disabled unless asked for
+    assert Settings.from_env({}).telegram_api_url == "https://api.telegram.org"
+    local = Settings.from_env({"TELEGRAM_API_URL": "http://127.0.0.1:8081"})
+    assert local.telegram_api_url == "http://127.0.0.1:8081"
+
+
+@pytest.mark.parametrize(
+    "env",
+    [
+        {"PLAN_BOT_LOG_FORMAT": "xml"},
+        {"PLAN_BOT_HEALTH_PORT": "70000"},
+        {"PLAN_BOT_RATE_BURST": "0"},
+    ],
+)
+def test_serving_and_logging_validation(env: dict[str, str]) -> None:
+    with pytest.raises(ConfigError):
+        Settings.from_env(env)

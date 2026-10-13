@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import asyncio
+import hashlib
+import logging
 from datetime import timedelta
 
 import pytest
 
+from plan_bot.config import Settings
 from plan_bot.ics import IcsError
 from plan_bot.repository import ChatRef, Repository
-from plan_bot.service import NO_FEED, BotService, UserError
+from plan_bot.service import BotService, ChatUnavailable, UserError
 from tests.conftest import FakeClock, FakeFeeds, RecordingNotifier, fixture_bytes, warsaw
 
 CHAT = ChatRef("telegram", "100")
@@ -18,8 +22,9 @@ async def test_commands_without_feed(service: BotService) -> None:
     for call in (service.today, service.tomorrow, service.next, service.week, service.groups):
         with pytest.raises(UserError, match="No timetable yet"):
             await call(CHAT)
-    assert await service.status(CHAT) == NO_FEED
-    assert await service.refresh(CHAT) == NO_FEED
+    for call in (service.status, service.refresh):
+        with pytest.raises(UserError, match="No timetable yet"):
+            await call(CHAT)
     assert await service.forget(CHAT) == "There was nothing stored for this chat."
 
 
@@ -224,3 +229,185 @@ async def test_default_notifier_drops_messages(repo: Repository, settings: objec
     service = BotService(repo, FakeFeeds(), settings, clock=FakeClock(warsaw(2026, 10, 12, 8)))
     await service.set_feed(CHAT, "demo")
     assert await service.send_due_reminders(warsaw(2026, 10, 12, 8, 20)) == 1
+
+
+async def test_blocked_chats_are_forgotten(
+    service: BotService, repo: Repository, clock: FakeClock, notifier: RecordingNotifier
+) -> None:
+    await service.set_feed(CHAT, "demo")
+
+    async def gone(chat: ChatRef, text: str) -> None:
+        raise ChatUnavailable("bot was blocked")
+
+    service.notifier.send = gone  # type: ignore[method-assign]
+    clock.now = warsaw(2026, 10, 12, 8, 20)
+    await service.send_due_reminders(clock.now)
+    assert await repo.get(CHAT) is None  # no point refreshing for a user who left
+
+
+async def test_reminders_survive_a_restart(
+    service: BotService,
+    repo: Repository,
+    feeds: FakeFeeds,
+    settings: Settings,
+    clock: FakeClock,
+    notifier: RecordingNotifier,
+) -> None:
+    await service.set_feed(CHAT, "demo")
+    clock.now = warsaw(2026, 10, 12, 8, 20)
+    assert await service.send_due_reminders(clock.now) == 1
+    # A new process: fresh service objects on the same database.
+    restarted = BotService(repo, feeds, settings, clock=clock, notifier=notifier)
+    clock.now = warsaw(2026, 10, 12, 8, 25)
+    assert await restarted.send_due_reminders(clock.now) == 0
+    assert len(notifier.sent) == 1
+    clock.now = warsaw(2026, 10, 12, 10, 5)  # the next lab block still gets its own reminder
+    assert await restarted.send_due_reminders(clock.now) >= 1
+
+
+async def test_reminders_follow_wall_clock_across_dst(
+    service: BotService, clock: FakeClock, notifier: RecordingNotifier
+) -> None:
+    # Europe/Warsaw returns to standard time on Sunday 25 Oct 2026. A class at 08:30 on
+    # Monday the 26th is 07:30 UTC, one hour later in UTC than the week before.
+    await service.set_feed(CHAT, "demo")
+    clock.now = warsaw(2026, 10, 26, 8, 20)
+    assert clock.now.utcoffset() == timedelta(hours=1)
+    assert await service.send_due_reminders(clock.now) == 1
+    assert "08:30" in notifier.texts()[-1]
+    clock.now = warsaw(2026, 10, 19, 8, 20)
+    assert clock.now.utcoffset() == timedelta(hours=2)
+    assert await service.send_due_reminders(clock.now) == 1
+
+
+async def test_demo_timetable_never_runs_out(
+    service: BotService, clock: FakeClock, notifier: RecordingNotifier
+) -> None:
+    clock.now = warsaw(2027, 6, 2, 7, 0)  # months after the bundled semester ended
+    reply = await service.set_feed(CHAT, "demo")
+    assert "0 upcoming" not in reply
+    assert "Today · Wednesday, 2 Jun" in await service.today(CHAT)
+    assert "Starts in" in await service.next(CHAT)
+    # The demo shifts by whole weeks over time; that must never produce change alerts.
+    clock.now = warsaw(2027, 6, 9, 7, 0)
+    await service.refresh_due(clock.now)
+    assert notifier.sent == []
+
+
+async def test_feed_errors_are_localized(service: BotService, feeds: FakeFeeds) -> None:
+    await service.set_language(CHAT, "pl")
+    with pytest.raises(UserError, match="Serwer odpowiedział HTTP 404"):
+        await service.set_feed(CHAT, "https://missing.example.org/a.ics")
+
+
+async def test_weekly_summary_to_a_blocked_chat_does_not_recreate_it(
+    service: BotService, repo: Repository
+) -> None:
+    await service.set_feed(CHAT, "demo")
+
+    async def gone(chat: ChatRef, text: str) -> None:
+        raise ChatUnavailable("bot was blocked")
+
+    service.notifier.send = gone  # type: ignore[method-assign]
+    assert await service.send_weekly_summaries(warsaw(2026, 10, 18, 18, 5)) == 0
+    assert await repo.get(CHAT) is None
+
+
+class GatedFeeds(FakeFeeds):
+    """Holds downloads of one URL until ``gate`` is set."""
+
+    def __init__(self, held: str, **payloads: bytes | Exception) -> None:
+        super().__init__(**payloads)
+        self.held = held
+        self.gate = asyncio.Event()
+        self.waiting = asyncio.Event()
+        self.hold = False
+
+    async def fetch(self, url: str) -> bytes:
+        if self.hold and url == self.held:
+            self.waiting.set()
+            await self.gate.wait()
+        return await super().fetch(url)
+
+
+async def test_refresh_survives_chats_forgetting_or_switching_feeds_meanwhile(
+    repo: Repository, settings: Settings, clock: FakeClock, notifier: RecordingNotifier
+) -> None:
+    other_url = "https://other.example.org/feed.ics"
+    new_url = "https://new.example.org/feed.ics"
+    feeds = GatedFeeds(
+        URL,
+        **{
+            URL: fixture_bytes("edits_before.ics"),
+            other_url: fixture_bytes("edits_before.ics"),
+            new_url: fixture_bytes("sample.ics"),
+        },
+    )
+    service = BotService(repo, feeds, settings, clock=clock, notifier=notifier)
+    third = ChatRef("telegram", "300")
+    await service.set_feed(CHAT, URL)
+    await service.set_feed(third, URL)
+    await service.set_feed(OTHER, other_url)
+    clock.now += timedelta(hours=1)
+    feeds.hold = True
+    job = asyncio.create_task(service.refresh_due(clock.now))
+    await asyncio.wait_for(feeds.waiting.wait(), timeout=5)
+    # While CHAT's old feed is being downloaded: CHAT leaves, the third chat switches feeds.
+    gone = await repo.get(CHAT)
+    assert gone is not None
+    await service.forget(CHAT)
+    feeds.hold = False
+    await service.set_feed(third, new_url)
+    switched = await repo.get(third)
+    assert switched is not None
+    expected = await repo.lessons(switched.id)
+    feeds.gate.set()
+    assert await asyncio.wait_for(job, timeout=5) == 3
+    assert await repo.get(CHAT) is None
+    assert await repo.lessons(gone.id) == []  # nothing stored for the forgotten chat
+    assert await repo.lessons(switched.id) == expected  # the new feed was not overwritten
+    other = await repo.get(OTHER)
+    assert other is not None
+    assert other.last_refresh_at == clock.now
+
+
+async def test_logs_use_a_keyed_pseudonym_instead_of_the_chat_id(
+    repo: Repository, settings: Settings, clock: FakeClock, caplog: pytest.LogCaptureFixture
+) -> None:
+    secret = Settings(database_url=settings.database_url, telegram_token="1:secret")
+    service = BotService(repo, FakeFeeds(), secret, clock=clock)
+    other_key = BotService(repo, FakeFeeds(), settings, clock=clock)
+    await service.set_feed(CHAT, "demo")
+
+    async def gone(chat: ChatRef, text: str) -> None:
+        raise ChatUnavailable("bot was blocked")
+
+    service.notifier.send = gone  # type: ignore[method-assign]
+    sub = await repo.get(CHAT)
+    assert sub is not None
+    tag = service._chat_tag(sub)
+    plain = hashlib.sha256(f"{CHAT.platform}:{CHAT.chat_id}".encode()).hexdigest()
+    assert tag != plain[: len(tag)]
+    assert tag != other_key._chat_tag(sub)  # the key comes from the bot's secret
+    with caplog.at_level(logging.INFO):
+        await service.send_due_reminders(warsaw(2026, 10, 12, 8, 20))
+    logged = [r for r in caplog.records if r.getMessage() == "chat unavailable, deleting its data"]
+    assert [r.__dict__["chat"] for r in logged] == [tag]
+    assert CHAT.chat_id not in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("lang", "text"), [("en", "too large or too complex"), ("pl", "zbyt duży")]
+)
+async def test_oversized_feed_gets_its_own_message(
+    service: BotService, feeds: FakeFeeds, repo: Repository, lang: str, text: str
+) -> None:
+    events = "".join(
+        f"BEGIN:VEVENT\r\nUID:d{i}\r\nDTSTART:20261005T080000Z\r\nRRULE:FREQ=DAILY\r\n"
+        "END:VEVENT\r\n"
+        for i in range(200)
+    )
+    feeds.payloads[URL] = f"BEGIN:VCALENDAR\r\n{events}END:VCALENDAR\r\n".encode()
+    await repo.update(CHAT, language=lang)
+    with pytest.raises(UserError, match=text):
+        await service.set_feed(CHAT, URL)

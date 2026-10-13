@@ -1,15 +1,14 @@
 [project]
 name = "plan-bot"
-version = "0.1.0"
+version = "0.2.0"
 description = "Telegram + Discord bot for university timetables published as iCalendar (ICS) feeds"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Maciej Zieliński" }]
-requires-python = ">=3.12,<3.13"
+requires-python = ">=3.12,<3.15"
 dependencies = [
     "aiohttp>=3.10",
-    "discord.py>=2.4",
     "icalendar>=6.1",
     "python-dateutil>=2.9",
     "tzdata>=2024.1",
@@ -20,6 +19,7 @@ dependencies = [
 
 [project.optional-dependencies]
 postgres = ["asyncpg>=0.29"]
+discord = ["discord.py>=2.4"]
 
 [project.scripts]
 plan-bot = "plan_bot.__main__:main"
@@ -32,6 +32,7 @@ dev = [
     "ruff>=0.6",
     # mypy >= 1.16 depends on pathspec (MPL-2.0); 1.15 is the last release without it.
     "mypy==1.15.0",
+    "discord.py>=2.4",
 ]
 
 [build-system]

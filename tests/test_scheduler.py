@@ -51,3 +51,58 @@ async def test_run_stops_on_event(service: BotService, clock: FakeClock) -> None
     stop.set()
     await asyncio.wait_for(task, timeout=1)
     assert scheduler._ticks >= 2
+
+
+async def test_slow_refresh_does_not_delay_reminders(
+    service: BotService,
+    clock: FakeClock,
+    notifier: RecordingNotifier,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    await service.set_feed(ChatRef("telegram", "sched"), "demo")
+    gate = asyncio.Event()
+    refreshes: list[datetime] = []
+
+    async def slow_refresh(now: datetime) -> int:
+        refreshes.append(now)
+        await gate.wait()
+        return 1
+
+    monkeypatch.setattr(service, "refresh_due", slow_refresh)
+    scheduler = Scheduler(service, clock=clock)
+    clock.now = warsaw(2026, 10, 12, 8, 0)
+    await asyncio.wait_for(scheduler.tick(), timeout=1)
+    clock.now = warsaw(2026, 10, 12, 8, 20)
+    await asyncio.wait_for(scheduler.tick(), timeout=1)  # the refresh is still running
+    assert any(text.startswith("Reminder:") for text in notifier.texts())
+    assert len(refreshes) == 1  # no second refresh while one is in flight
+    gate.set()
+    await scheduler.wait_for_refresh()
+    await scheduler.tick()
+    await scheduler.wait_for_refresh()
+    assert len(refreshes) == 2
+
+
+async def test_cancelling_run_cancels_the_refresh(
+    service: BotService, clock: FakeClock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    started = asyncio.Event()
+
+    async def endless(now: datetime) -> int:
+        started.set()
+        await asyncio.Event().wait()
+        return 0
+
+    monkeypatch.setattr(service, "refresh_due", endless)
+    scheduler = Scheduler(service, tick_seconds=60, clock=clock)
+    task = asyncio.create_task(scheduler.run(asyncio.Event()))
+    await asyncio.wait_for(started.wait(), timeout=1)
+    for _ in range(100):  # cancel between ticks, not in the middle of a database call
+        if scheduler.last_tick_at is not None:
+            break
+        await asyncio.sleep(0.01)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert scheduler._refreshing is not None
+    assert scheduler._refreshing.cancelled()

@@ -1,0 +1,17 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# Termux:Boot hook, installed as ~/.termux/boot/plan-bot.
+# Holds a wake lock for the bot and restarts it if it ever exits.
+termux-wake-lock
+
+APP_DIR="${APP_DIR:-$HOME/plan-bot}"
+LOG="$APP_DIR/logs/plan-bot.log"
+mkdir -p "$APP_DIR/logs"
+
+(
+  while true; do
+    # Keep the log below ~5 MB (one rotated copy).
+    if [ -f "$LOG" ] && [ "$(wc -c <"$LOG")" -gt 5000000 ]; then mv "$LOG" "$LOG.1"; fi
+    "$APP_DIR/start.sh" >>"$LOG" 2>&1
+    sleep 15
+  done
+) &

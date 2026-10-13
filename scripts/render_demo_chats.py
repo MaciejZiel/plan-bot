@@ -111,7 +111,7 @@ async def transcripts(workdir: Path) -> tuple[list[Bubble], list[Bubble]]:
         recorder.bubbles.append(Bubble("bot", reply or "", clock.now))
         clock.now += timedelta(seconds=40)
 
-    await say(tg, f"/setfeed {FEED}")
+    await say(tg, f"/subscribe {FEED}")
     await say(tg, "/filter L1,C1")
     await say(tg, "/today")
     await say(tg, "/next")
@@ -126,7 +126,7 @@ async def transcripts(workdir: Path) -> tuple[list[Bubble], list[Bubble]]:
 
     dc = ChatRef("discord", "2")
     clock.now = datetime(2026, 10, 13, 9, 5, tzinfo=TZ)
-    await say(dc, "/setfeed demo")
+    await say(dc, "/demo")
     await say(dc, "/filter L2,C2")
     await say(dc, "/tomorrow")
     clock.now = datetime(2026, 10, 18, 18, 0, tzinfo=TZ)
