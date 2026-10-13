@@ -106,7 +106,9 @@ def _pick(tokens: list[str], raw: str) -> str | None:
         tokens, "jutr", "dzis", "tydzie", "tygod", "zajec", "nastepn", "kiedy", "mam", "plan"
     ) or _has(tokens, "przypomn", "przypomin", "godz", "wylacz"):
         return _PL
-    if _has(tokens, "tomorrow", "tommorow", "today", "week", "next", "class", "what", "when", "remind"):
+    if _has(
+        tokens, "tomorrow", "tommorow", "today", "week", "next", "class", "what", "when", "remind"
+    ):
         return _EN
     return None
 
