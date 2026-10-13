@@ -93,3 +93,19 @@ def test_utc_type_rejects_naive_values() -> None:
     assert col.process_result_value(None, None) is None  # type: ignore[arg-type]
     aware = datetime(2026, 1, 1, 12, tzinfo=WARSAW)
     assert col.process_result_value(aware, None) == aware  # type: ignore[arg-type]
+
+
+async def test_move_rekeys_a_row_with_its_lessons(repo: Repository) -> None:
+    old, new = ChatRef("discord", "123"), ChatRef("discord", "user:9")
+    sub = await repo.update(old, ics_url="demo", reminder_minutes=45)
+    assert await repo.mark_reminded(sub.id, "k", NOW)
+    assert await repo.move(old, new)
+    assert await repo.get(old) is None
+    moved = await repo.get(new)
+    assert moved is not None
+    assert (moved.id, moved.reminder_minutes) == (sub.id, 45)
+    assert not await repo.mark_reminded(sub.id, "k", NOW)  # its markers came along
+    assert not await repo.move(old, new)  # nothing left to move
+    await repo.update(old, ics_url="demo")
+    assert not await repo.move(old, new)  # never overwrites an existing row
+    assert await repo.get(old) is not None

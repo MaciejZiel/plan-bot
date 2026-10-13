@@ -165,6 +165,9 @@ class CommandRouter:
             "forget": lambda chat, _: s.forget(chat),
         }
 
+    async def adopt_chat(self, old: ChatRef, new: ChatRef) -> bool:
+        return await self.service.adopt_chat(old, new)
+
     async def handle(self, chat: ChatRef, name: str, arg: str | None = None) -> str:
         return (await self.reply(chat, name, arg)).text
 

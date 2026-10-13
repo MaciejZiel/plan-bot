@@ -462,6 +462,18 @@ class BotService:
     def _filter(sub: Subscription) -> GroupFilter:
         return GroupFilter.parse(sub.group_filter)
 
+    async def adopt_chat(self, old: ChatRef, new: ChatRef) -> bool:
+        """Move an older row to the chat's current key (e.g. a Discord DM channel to its user)."""
+        tags = {"chat": self._chat_tag(new), "previous": self._chat_tag(old)}
+        if await self.repo.move(old, new):
+            log.info("chat re-keyed", extra=tags)
+            return True
+        # Both exist: the user already set things up again under the new key. Keeping
+        # the old row would deliver every reminder twice.
+        if await self.repo.get(new) is not None and await self.repo.delete(old):
+            log.info("duplicate chat row dropped", extra=tags)
+        return False
+
     async def chat_gone(self, chat: ChatRef) -> None:
         """The user blocked the bot or left: stop working for nobody and drop their data."""
         log.info("chat unavailable, deleting its data", extra={"chat": self._chat_tag(chat)})
