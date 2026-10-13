@@ -117,6 +117,6 @@ def test_too_many_lessons_are_refused() -> None:
 
 def test_expansion_has_a_time_budget() -> None:
     # Impossible rules make dateutil scan up to the year 9999 without yielding.
-    data = _calendar("FREQ=DAILY;BYMONTH=2;BYMONTHDAY=31", "20260105T080000", events=5)
+    data = _calendar("FREQ=WEEKLY;BYMONTH=2;BYMONTHDAY=31", "20260105T080000", events=5)
     with pytest.raises(FeedTooComplex, match="too complex"):
-        expand(data, HOSTILE_WINDOW, WARSAW, seconds=0.5)
+        expand(data, HOSTILE_WINDOW, WARSAW, seconds=0.1)
