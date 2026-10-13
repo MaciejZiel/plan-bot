@@ -16,7 +16,7 @@ log = logging.getLogger(__name__)
 
 #: Commands that download a feed cost extra rate-limit tokens.
 #: The bundled demo never touches the network, so it costs a normal command.
-HEAVY_COMMANDS = frozenset({"subscribe", "refresh"})
+HEAVY_COMMANDS = frozenset({"subscribe", "refresh", "upload"})
 HEAVY_COST = 4
 
 
@@ -180,6 +180,34 @@ class CommandRouter:
         language of a brand-new chat.
         """
         name = ALIASES.get(name.lower(), name.lower())
+        return await self._guarded(chat, name, locale, lambda: self._run(chat, name, arg))
+
+    async def upload(
+        self,
+        chat: ChatRef,
+        filename: str,
+        content_type: str | None,
+        size: int,
+        read: Callable[[], Awaitable[bytes]],
+        *,
+        locale: str | None = None,
+    ) -> Reply:
+        """Use an attached ``.ics`` file as the timetable; the file itself is never kept."""
+
+        async def run() -> Reply:
+            try:
+                text = await self.service.upload_feed(chat, filename, content_type, size, read)
+            except UserError as exc:
+                return Reply(str(exc))
+            lang = await self.service.language(chat)
+            log.info("command", extra={"command": "upload", "platform": chat.platform})
+            return Reply(text, menu_buttons(lang, extra="reminders"))
+
+        return await self._guarded(chat, "upload", locale, run)
+
+    async def _guarded(
+        self, chat: ChatRef, name: str, locale: str | None, run: Callable[[], Awaitable[Reply]]
+    ) -> Reply:
         key = str(chat)
         if self.limiter is not None:
             wait = self.limiter.check(key, HEAVY_COST if name in HEAVY_COMMANDS else 1)
@@ -190,7 +218,7 @@ class CommandRouter:
                 return Reply(tr(lang, "rate_limited", seconds=wait))
         try:
             await self.service.adopt_language(chat, locale)
-            reply = await self._run(chat, name, arg)
+            reply = await run()
             return replace(reply, lang=await self.service.language(chat))
         except Exception:
             log.exception("command failed", extra={"command": name, "platform": chat.platform})
