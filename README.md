@@ -1,16 +1,28 @@
-# plan-bot
+<p align="center">
+  <img src="docs/logo.svg" width="72" height="72" alt="plan-bot logo">
+</p>
 
-**Your university timetable, answered in the chat you already use.**
+<h1 align="center">plan-bot</h1>
 
-**[Add the bot to Discord](https://discord.com/oauth2/authorize?client_id=1559599102084521994&scope=bot+applications.commands&permissions=84992)** · [Status](https://status.maciejzielinski.dev) · [Portfolio](https://maciejzielinski.dev)
+<p align="center">
+  <b>Your university timetable, answered in the chat you already use.</b>
+</p>
 
-Try it now: run `/demo` for a fictional sample timetable, or `/subscribe` with an `.ics` file or a link to your own.
+<p align="center">
+  <a href="https://discord.com/oauth2/authorize?client_id=1559599102084521994&scope=bot+applications.commands&permissions=84992">Add the bot to Discord</a> · <a href="https://status.maciejzielinski.dev">Status</a> · <a href="https://maciejzielinski.dev">Portfolio</a>
+</p>
 
-[![CI](https://github.com/MaciejZiel/plan-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/MaciejZiel/plan-bot/actions/workflows/ci.yml)
-![Python 3.12 | 3.14](https://img.shields.io/badge/python-3.12%20%7C%203.14-3776ab)
-![Coverage 98%](https://img.shields.io/badge/coverage-98%25-brightgreen)
-![Ruff + mypy strict](https://img.shields.io/badge/lint-ruff%20%2B%20mypy%20strict-informational)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+<p align="center">
+  <a href="https://github.com/MaciejZiel/plan-bot/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/MaciejZiel/plan-bot/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="LICENSE"><img alt="Licence: MIT" src="https://img.shields.io/badge/licence-MIT-blue"></a>
+  <img alt="Python 3.12 | 3.14" src="https://img.shields.io/badge/python-3.12%20%7C%203.14-3776ab">
+  <img alt="Coverage 98%" src="https://img.shields.io/badge/coverage-98%25-brightgreen">
+  <img alt="Ruff and mypy strict" src="https://img.shields.io/badge/lint-ruff%20%2B%20mypy%20strict-informational">
+</p>
+
+<p align="center">Try it now: run <code>/demo</code> for a fictional sample timetable, or <code>/subscribe</code> with an <code>.ics</code> file or a link to your own.</p>
+
+## ✨ Features
 
 plan-bot reads any timetable
 published as an iCalendar (ICS) link or exported as an `.ics` file and gives students on
@@ -37,7 +49,7 @@ chat events into calls to it and render the answers (embeds on Discord, text on 
 > provide. The repository ships a clearly **fictional** sample timetable
 > ("Northbridge Institute of Imaginary Computing") for demos and tests.
 
-## Try it in 30 seconds
+## 🎬 Try it in 30 seconds
 
 **Discord** (the public demo runs here)
 
@@ -124,23 +136,25 @@ bot > Could not download the timetable: Links to private or local network addres
       allowed
 ```
 
-## Screenshots
+## 📸 Screenshots
 
 The images below are a **demo mock-up**, not a screenshot of a real Discord server or of anyone's
 plan. The message texts are real bot output for the fictional sample timetable (`/demo`, `/next`),
 laid out in a static HTML chat frame ([`docs/screenshots/discord-demo.html`](docs/screenshots/discord-demo.html))
 and captured with Playwright at a desktop and a mobile width.
 
-<img src="docs/screenshots/discord-demo.png" alt="Demo mock-up of Discord replies from plan-bot to /demo and /next on a fictional timetable, desktop width" width="460">
-<img src="docs/screenshots/discord-demo-mobile.png" alt="The same mock-up at mobile width" width="220">
+<p align="center">
+  <img src="docs/screenshots/discord-demo.png" alt="Demo mock-up of Discord replies from plan-bot to /demo and /next on a fictional timetable, desktop width" width="460">
+  <img src="docs/screenshots/discord-demo-mobile.png" alt="The same mock-up at mobile width" width="220">
+</p>
 
-## Self-hosted
+## 🏠 Self-hosted
 
 The public bot runs on a home server, not on a cloud platform. Its uptime is on the
 [status page](https://status.maciejzielinski.dev). You can run your own copy; see
-[Quick start](#quick-start) and [Self-hosting on Termux](#self-hosting-on-termux).
+[Quick start](#-quick-start) and [Self-hosting on Termux](#-self-hosting-on-termux).
 
-## Architecture
+## 🧭 Architecture
 
 ```mermaid
 flowchart LR
@@ -185,7 +199,7 @@ Each refresh downloads the feed, expands it into concrete lesson occurrences for
 snapshot and sends a change alert to the chat when needed. Reminders and summaries are read from
 the snapshot, so they keep working while the university server is down.
 
-## Quick start
+## 🚀 Quick start
 
 ### 1. Try it locally without any token
 
@@ -204,7 +218,7 @@ uv run plan-bot console --at 2026-10-12T07:45   # pretend it is a Monday morning
 1. Go to the [Discord Developer Portal](https://discord.com/developers/applications) and click
    **New Application**.
 2. Open **Bot**, click **Reset Token**, and copy the token into `DISCORD_BOT_TOKEN` in `.env`.
-   Leave all three **Privileged Gateway Intents** switched off (see [Discord](#discord)).
+   Leave all three **Privileged Gateway Intents** switched off (see [Discord](#-discord)).
 3. Optional, to use the bot in DMs and every server without inviting it to each one: open
    **Installation** and tick **User Install** next to **Guild Install**.
 4. Build the invite link from [Invite URL and permissions](#invite-url-and-permissions) and open
@@ -274,7 +288,7 @@ which saves one `.ics` file for the whole semester), upload that file instead. O
 - If your university offers no export, plan-bot can't help. It deliberately does not log in to
   portals or scrape pages.
 
-## Discord
+## 💬 Discord
 
 ### What you get
 
@@ -359,7 +373,7 @@ needed to reply to a message). Slash commands, buttons and DM reminders need no 
 permission at all, so a server admin can also invite the bot with `permissions=0` and use only
 slash commands. The bot never asks for Administrator, Manage \* or Read Message Content.
 
-## Commands
+## 📖 Commands
 
 | Command | What it does |
 |---|---|
@@ -383,7 +397,7 @@ Telegram shows these as a command menu (in Polish for Polish clients) and as inl
 under replies, Discord as localised slash commands with embeds and buttons, so most of the bot
 can be used without typing. `/start` exists on Telegram only; on Discord use `/help`.
 
-## Configuration
+## 🔧 Configuration
 
 All settings are environment variables (`DISCORD_BOT_TOKEN`, `TELEGRAM_BOT_TOKEN`,
 `DISCORD_DEV_GUILD_ID` for instant slash command sync while testing; the older name
@@ -394,7 +408,7 @@ horizon, summary day and hour, download size limit and timeout, feed cache, per-
 log format (`text` or `json`) and the health endpoint (`PLAN_BOT_HEALTH_PORT`,
 `PLAN_BOT_BASE_PATH`).
 
-## Operating it
+## 🩺 Operating it
 
 - **Rate limiting.** Every chat has a token bucket (default: a burst of 10 commands, then 30 per
   minute). Commands that download a feed cost 4 tokens. A throttled chat is warned once, then
@@ -409,7 +423,7 @@ log format (`text` or `json`) and the health endpoint (`PLAN_BOT_HEALTH_PORT`,
   across DST switches.
 - **Blocked bot.** When Telegram reports that a user blocked the bot, that chat's data is deleted.
   On Discord a user who closed their DMs keeps the timetable but loses pushes; a deleted channel
-  or account has its data deleted (see [Discord](#discord)).
+  or account has its data deleted (see [Discord](#-discord)).
 - **Logs.** `PLAN_BOT_LOG_FORMAT=json` writes one JSON object per line. Chat ids are logged as a
   short keyed hash (HMAC with a key derived from the bot token, so it cannot be reversed by
   hashing every possible id) and anything that looks like a bot token is redacted.
@@ -417,7 +431,7 @@ log format (`text` or `json`) and the health endpoint (`PLAN_BOT_HEALTH_PORT`,
   `{"status": "ok", ...}` while the database answers and the scheduler ticks, and 503 otherwise.
   It listens on `127.0.0.1` and exposes no user data.
 
-## Self-hosting on Termux
+## 🏠 Self-hosting on Termux
 
 [`deploy/termux/`](deploy/termux) runs the bot as a plain process on a self-hosted server running
 Termux (no Docker).
@@ -452,7 +466,7 @@ nano ~/.config/plan-bot/env           # paste DISCORD_BOT_TOKEN (and/or TELEGRAM
 > graceful stop) was exercised on Linux against a local fake Telegram API, but they have not yet
 > been run on a real Termux device.
 
-## Privacy notes
+## 🔒 Privacy notes
 
 The public Discord bot has a short [privacy policy](PRIVACY.md) and [terms](TERMS.md).
 
@@ -472,7 +486,7 @@ The public Discord bot has a short [privacy policy](PRIVACY.md) and [terms](TERM
 - A feed link posted as a normal message in a server is visible to the channel: use `/subscribe`
   (private answer) or a DM with the bot.
 
-## Key decisions
+## 🧱 Key decisions
 
 - **One core, thin adapters.** `BotService` returns structured views (rendered to plain text by
   default, to embeds by the Discord adapter) and pushes notifications through a `Notifier`
@@ -513,7 +527,16 @@ The public Discord bot has a short [privacy policy](PRIVACY.md) and [terms](TERM
 - **Dependencies must be at least two weeks old** (`[tool.uv] exclude-newer`), and every
   component is listed with its license in [`3rdparty_licenses.md`](3rdparty_licenses.md).
 
-## Development
+## 🛠 Tech stack
+
+| Layer | Used |
+|---|---|
+| Core | Python 3.12 to 3.14, aiohttp, icalendar, python-dateutil |
+| Storage | SQLite (aiosqlite) or PostgreSQL (asyncpg), SQLAlchemy 2, Alembic |
+| Chat | discord.py, Telegram Bot API (long polling) |
+| Quality | pytest, pytest-asyncio, ruff, mypy (strict) |
+
+## 🧪 Development
 
 ```bash
 uv sync --all-extras
@@ -543,7 +566,7 @@ They cover:
 - the English/Polish catalogue (every key in both languages), onboarding, rate limiting, the
   health endpoint, JSON logging and token redaction, SSRF checks and the rolling demo timetable
 
-## Limitations
+## 🚧 Limitations
 
 - Replies exist in English and Polish only. Discord slash commands are described in Polish and
   English; clients in other languages see English.
@@ -561,11 +584,11 @@ They cover:
   public URL.
 - The scheduler runs inside one process, so run a single instance per database.
 
-## Changelog
+## 📝 Changelog
 
 See [CHANGELOG.md](CHANGELOG.md).
 
-## License
+## 📄 Licence
 
 [MIT](LICENSE) © 2026 Maciej Zieliński. Third-party components and their licenses are listed in
 [`3rdparty_licenses.md`](3rdparty_licenses.md).
