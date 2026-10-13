@@ -10,7 +10,9 @@ For each Discord user who uses the bot:
 
 - your Discord user ID (and, for rows created by an earlier version, the ID of a server channel;
   a row keyed by your DM channel is moved to your user ID the next time you write to the bot)
-- the timetable (ICS) link you subscribed with, or a note that you use the fictional demo
+- the timetable (ICS) link you subscribed with, a note that you uploaded an .ics file (the file
+  itself is not kept, only the classes read from it, and uploads are never refreshed), or a
+  note that you use the fictional demo
 - your language, group filter and reminder, change-alert and weekly-summary settings
 - a copy of the classes read from your timetable (subject, time, room, description, groups),
   refreshed about every 30 minutes
