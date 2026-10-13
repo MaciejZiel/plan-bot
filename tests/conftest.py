@@ -73,7 +73,7 @@ class FakeFeeds:
             return fixture_bytes("sample.ics")
         payload = self.payloads.get(url)
         if payload is None:
-            raise FetchError("The server answered HTTP 404")
+            raise FetchError("fetch.http", status=404)
         if isinstance(payload, Exception):
             raise payload
         return payload
