@@ -16,7 +16,7 @@ from plan_bot.config import Settings
 from plan_bot.db import Subscription
 from plan_bot.diff import Change, diff
 from plan_bot.domain import GroupFilter, Lesson
-from plan_bot.fetch import DEMO_URL, FetchError, normalize_url, redact_url
+from plan_bot.fetch import DEMO_URL, FetchError, demo_calendar, normalize_url, redact_url
 from plan_bot.formatting import (
     format_changes,
     format_day,
@@ -277,7 +277,7 @@ class BotService:
             now + timedelta(days=self.settings.change_horizon_days),
         )
         changes = diff(old, new, since=now, until=until) if old else []
-        if notify and changes and sub.notify_changes:
+        if notify and changes and sub.notify_changes and sub.ics_url != DEMO_URL:
             relevant = [c for c in changes if c.lesson.matches(self._filter(sub))]
             if relevant:
                 await self._notify(sub, format_changes(relevant, self.tz))
@@ -328,7 +328,10 @@ class BotService:
 
     async def _download(self, url: str, now: datetime) -> list[Lesson]:
         try:
-            data = await self.fetcher.fetch(url)
+            if url == DEMO_URL:
+                data = demo_calendar(now.astimezone(self.tz).date())
+            else:
+                data = await self.fetcher.fetch(url)
             return expand(data, self._window(now), self.tz)
         except FetchError as exc:
             raise UserError(f"Could not download the timetable: {exc}") from exc
