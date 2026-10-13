@@ -25,6 +25,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   other users.
 - `discord.py` is an optional extra (`pip install 'plan-bot[discord]'`).
 - Chats that blocked the bot are deleted instead of being retried forever.
+- Recurrence expansion is bounded (no sub-daily rules, a step budget, a lesson cap and a time
+  limit) and runs in a worker thread; feeds are refreshed in the background so reminders are
+  never held up by a slow server.
+- Log pseudonyms for chat ids are keyed with a secret; only a non-default first-contact language
+  is stored for chats without a feed.
 
 ## [0.1.0] - 2026-10-10
 

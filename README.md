@@ -236,7 +236,8 @@ log format (`text` or `json`) and the health endpoint (`PLAN_BOT_HEALTH_PORT`,
   ignored until it has tokens again.
 - **Feed errors.** A failing feed is retried with exponential back-off, the stored snapshot keeps
   answering `/next` and reminders, and the chat is told once after the third failure. Identical
-  links share one download for two minutes, and at most four downloads run at once.
+  links share one download for two minutes (at most 32 MB cached), and at most four downloads
+  run at once. Feeds are refreshed in the background, so slow servers do not delay reminders.
 - **Restarts.** Chats, settings, snapshots and the "reminder already sent" markers are in the
   database, so a restart neither forgets nor repeats a reminder. Reminders are matched against UTC
   instants while class times are expanded in the feed's local wall-clock time, so they stay right
@@ -318,10 +319,17 @@ nano ~/.config/plan-bot/env           # paste TELEGRAM_BOT_TOKEN (from @BotFathe
   weekly summary) lives in the database, so one periodic tick is enough, restarts are harmless,
   and reminders are sent exactly once (enforced by a primary key).
 - **Defensive fetching.** Only `http(s)`/`webcal` links without credentials are accepted. The
-  fetcher enforces a size cap and a timeout, follows at most five redirects (each one
-  re-validated), and the connector itself refuses loopback, private and link-local addresses (the
-  validated address is the one that is connected to, so DNS rebinding does not help). Feeds that keep failing are retried with exponential back-off, and the chat
-  hears about it once, after the third failure.
+  fetcher enforces a size cap and one timeout for the whole download (redirects included),
+  follows at most five redirects (each hop re-validated), and refuses loopback, private,
+  link-local, CGNAT, multicast and reserved addresses, including IPv6 forms that embed one
+  (IPv4-mapped, NAT64). Host names are checked inside the connector's resolver, so the validated
+  address is the one that is connected to and DNS rebinding does not help. Feeds that keep
+  failing are retried with exponential back-off, and the chat hears about it once, after the
+  third failure.
+- **Bounded expansion.** Recurrence rules repeating hourly or faster are ignored, a rule may
+  generate at most 50,000 occurrences (counting those before the window), a feed at most 20,000
+  lessons in the window, and expanding one feed may take at most 10 s. Expansion runs in a worker
+  thread, one feed at a time, so a hostile feed cannot stall the other chats.
 - **Timezone-correct storage.** All datetimes are aware. The database stores UTC through a
   custom `TypeDecorator`, so SQLite and PostgreSQL behave the same.
 - **Dependencies must be at least two weeks old** (`[tool.uv] exclude-newer`), and every
@@ -337,7 +345,7 @@ uv run pytest --cov               # fails under 85 % coverage
 uv run python scripts/render_demo_chats.py docs/screenshots   # regenerate the demo mock-ups
 ```
 
-The suite has **172 tests** with **98% line coverage** (CI fails below 85%) and runs in a few
+The suite has **219 tests** with **98% line coverage** (CI fails below 85%) and runs in a few
 seconds. All tests use fictional fixtures (`tests/fixtures/*.ics` and the bundled sample).
 They cover:
 
@@ -348,6 +356,9 @@ They cover:
 - a feed before and after edits
 - a fake Telegram Bot API server (commands, inline-button callbacks, concurrent chats, blocked
   users) and the Discord slash-command callbacks
+- races: per-chat ordering under random delays, one busy chat versus the shared slots, and
+  background jobs meeting `/forget` or a feed switch half-way
+- hostile feeds (sub-daily and impossible rules, too many lessons) and SSRF address forms
 - the English/Polish catalogue (every key in both languages), onboarding, rate limiting, the
   health endpoint, JSON logging and token redaction, SSRF checks and the rolling demo timetable
 
