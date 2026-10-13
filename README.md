@@ -232,12 +232,29 @@ The SQLite database is stored in the `plan-bot-data` volume. For PostgreSQL, run
 Docker, install the extra with `uv sync --extra postgres`. Migrations run automatically on start;
 `plan-bot migrate` applies them without starting the bot.
 
-### 4. Getting your ICS link
+### 4. Getting your ICS link or file
 
 Look in your university's timetable or student portal for an option called *export to
-calendar*, *iCal*, *ICS*, *subscribe* or *add to Google/Outlook calendar*, and copy the **link**
-(not a downloaded file). `webcal://` links work too. Then send `/subscribe <link>` to the bot.
+calendar*, *iCal*, *ICS*, *subscribe* or *add to Google/Outlook calendar*. If it gives you a
+**link**, copy it (`webcal://` links work too) and send `/subscribe <link>` to the bot.
 
+If the portal only lets you **download a file** (for example PJATK's *Eksportuj do iCalendar*,
+which saves one `.ics` file for the whole semester), upload that file instead. On Discord, run
+`/subscribe` and attach it in the `file` option.
+
+- The answer is ephemeral, and the file's contents are stored only for your chat as the parsed
+  timetable. `/forget` deletes them. The file itself is not kept.
+- The file must be an `.ics` calendar within the size limit (`PLAN_BOT_MAX_ICS_BYTES`, 5 MB by
+  default). Reminders, `/today`, `/next`, `/week` and the other commands work as with a link.
+- An uploaded calendar has no address to refetch, so it is never refreshed automatically and
+  `/refresh` has nothing to do. `/status` shows `uploaded file, <date>`. When the plan changes,
+  export it again and re-upload it: the new file replaces the old one and the reply lists what
+  changed (new, moved, re-roomed and cancelled classes), the same way a link refresh does.
+- Only classes from about a week ago to `PLAN_BOT_HORIZON_DAYS` (150) ahead are kept, so re-upload
+  after a long break.
+- The PJATK export writes local times with a `Z` suffix and puts the room into the title
+  (`ZPR wykład s. W21`). plan-bot reads those times as Warsaw wall-clock time (only for files
+  whose `PRODID` says `PJWSTK PLAN`) and shows the room as the location.
 - If you already subscribe to the timetable in Google Calendar, open the calendar's
   *Settings → Integrate calendar* page. The *Secret address in iCal format* works, but read the
   privacy notes below first.
@@ -493,7 +510,7 @@ uv run pytest --cov               # fails under 85 % coverage
 uv run python scripts/render_demo_chats.py docs/screenshots   # regenerate the demo mock-ups
 ```
 
-The suite has **390 tests** with **98% line coverage** (CI fails below 85%) and runs in about
+The suite has **427 tests** with **98% line coverage** (CI fails below 85%) and runs in about
 ten seconds. All tests use fictional fixtures (`tests/fixtures/*.ics` and the bundled sample).
 They cover:
 

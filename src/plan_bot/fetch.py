@@ -17,6 +17,9 @@ from aiohttp.abc import AbstractResolver, ResolveResult
 from plan_bot.i18n import tr
 
 DEMO_URL = "demo"
+#: Stored in ``ics_url`` for a calendar the user uploaded as a file: there is nothing to
+#: refetch. It is not a valid URL, so a user can never set it through ``/subscribe``.
+UPLOAD_URL = "upload"
 MAX_REDIRECTS = 5
 MAX_URL_LENGTH = 2048
 USER_AGENT = "plan-bot/0.2 (+https://github.com/MaciejZiel/plan-bot)"
@@ -79,6 +82,8 @@ def redact_url(url: str) -> str:
     """Hide the path and query, which often contain a personal access token."""
     if url == DEMO_URL:
         return "bundled fictional demo timetable"
+    if url == UPLOAD_URL:
+        return "uploaded file"
     parts = urlsplit(url)
     return f"{parts.scheme}://{parts.hostname}/…"
 

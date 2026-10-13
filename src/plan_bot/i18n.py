@@ -88,7 +88,10 @@ _M: dict[str, dict[str, str]] = {
         "pl": "Następne zajęcia: sala i czas do startu",
     },
     "cmd.week": {"en": "This week's plan", "pl": "Plan na tydzień"},
-    "cmd.subscribe": {"en": "Set your timetable ICS link", "pl": "Ustaw link ICS z planem"},
+    "cmd.subscribe": {
+        "en": "Set your timetable from an ICS link or file",
+        "pl": "Ustaw plan z linku lub pliku ICS",
+    },
     "cmd.demo": {"en": "Try a fictional sample timetable", "pl": "Wypróbuj przykładowy plan"},
     "cmd.groups": {"en": "Groups found in the timetable", "pl": "Grupy znalezione w planie"},
     "cmd.filter": {"en": "Show only your groups", "pl": "Pokaż tylko swoje grupy"},
@@ -110,6 +113,10 @@ _M: dict[str, dict[str, str]] = {
     "arg.subscribe": {
         "en": "https://... or webcal://... link to the .ics feed",
         "pl": "link https://... lub webcal://... do pliku .ics",
+    },
+    "arg.subscribe_file": {
+        "en": "or attach the .ics file you exported from your university",
+        "pl": "albo załącz plik .ics wyeksportowany z uczelni",
     },
     "arg.filter": {"en": "e.g. L1,C2 or 'off'", "pl": "np. L1,C2 albo 'off'"},
     "arg.remind": {"en": "e.g. 15 or 'off'", "pl": "np. 15 albo 'off'"},
@@ -162,8 +169,55 @@ _M: dict[str, dict[str, str]] = {
         "en": "bundled fictional demo timetable",
         "pl": "wbudowany fikcyjny plan demonstracyjny",
     },
+    "feed_upload": {"en": "uploaded file", "pl": "wgrany plik"},
+    "feed_upload_on": {"en": "uploaded file, {date}", "pl": "wgrany plik, {date}"},
+    "upload_status_hint": {
+        "en": "It is not refreshed automatically. When the plan changes, export it again and "
+        "re-upload it with /subscribe file:<.ics file>.",
+        "pl": "Nie jest odświeżany automatycznie. Gdy plan się zmieni, wyeksportuj go ponownie "
+        "i wgraj przez /subscribe file:<plik .ics>.",
+    },
+    "refresh_uploaded": {
+        "en": "This timetable came from an uploaded file, so there is nothing to refresh. "
+        "Export it again and re-upload it with /subscribe file:<.ics file>.",
+        "pl": "Ten plan pochodzi z wgranego pliku, więc nie ma czego odświeżać. "
+        "Wyeksportuj go ponownie i wgraj przez /subscribe file:<plik .ics>.",
+    },
+    "upload_both": {
+        "en": "Give either a link or a file, not both.",
+        "pl": "Podaj link albo plik, nie jedno i drugie.",
+    },
+    "upload_too_large": {
+        "en": "That file is too large (the limit is {mb} MB).",
+        "pl": "Ten plik jest za duży (limit to {mb} MB).",
+    },
+    "upload_bad_type": {
+        "en": "That does not look like a calendar. Upload the .ics file exported from your "
+        "university's timetable.",
+        "pl": "To nie wygląda na kalendarz. Wgraj plik .ics wyeksportowany z planu uczelni.",
+    },
+    "upload_read_failed": {
+        "en": "Could not read the attached file. Try uploading it again.",
+        "pl": "Nie udało się odczytać załączonego pliku. Spróbuj wgrać go ponownie.",
+    },
+    "upload_not_ics": {
+        "en": "That file is not an iCalendar file ({error}).",
+        "pl": "Ten plik nie jest plikiem iCalendar ({error}).",
+    },
+    "upload_same": {
+        "en": "The previous upload was replaced; no changes in upcoming classes.",
+        "pl": "Poprzedni wgrany plik został zastąpiony; bez zmian w nadchodzących zajęciach.",
+    },
+    "saved_upload_hint": {
+        "en": "The file is stored for this chat only; /forget deletes it.",
+        "pl": "Plik jest zapisany tylko dla tego czatu; /forget go usuwa.",
+    },
     "week_usage": {"en": "Use /week or /week next", "pl": "Użyj /week albo /week next"},
     "groups_list": {"en": "Groups: {groups}", "pl": "Grupy: {groups}"},
+    "groups_single": {
+        "en": "This timetable has only one group tag ({group}), so filtering will not help.",
+        "pl": "Ten plan ma tylko jedno oznaczenie grupy ({group}), więc filtr nic nie da.",
+    },
     "groups_none": {
         "en": "This timetable has no group tags.",
         "pl": "Ten plan nie ma oznaczeń grup.",

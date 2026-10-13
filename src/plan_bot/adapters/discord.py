@@ -21,7 +21,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-from collections.abc import Callable, Coroutine
+from collections.abc import Awaitable, Callable, Coroutine
 from typing import Any, Protocol
 
 import discord
@@ -33,7 +33,7 @@ from plan_bot.adapters import discord_render as render
 from plan_bot.commands import COMMANDS, Button, CommandSpec, Reply, menu_buttons, parse_command
 from plan_bot.i18n import DEFAULT_LANG, LANG_NAMES, LANGS, lang_for_locale, tr
 from plan_bot.repository import ChatRef
-from plan_bot.service import ChatUnavailable, NotificationsBlocked
+from plan_bot.service import ChatUnavailable, NotificationsBlocked, UserError
 from plan_bot.views import View
 
 log = logging.getLogger(__name__)
@@ -87,6 +87,17 @@ _CUSTOM = frozenset({"start", "subscribe", "remind"})
 class Router(Protocol):
     async def reply(
         self, chat: ChatRef, name: str, arg: str | None = None, *, locale: str | None = None
+    ) -> Reply: ...
+
+    async def upload(
+        self,
+        chat: ChatRef,
+        filename: str,
+        content_type: str | None,
+        size: int,
+        read: Callable[[], Awaitable[bytes]],
+        *,
+        locale: str | None = None,
     ) -> Reply: ...
 
     async def adopt_chat(self, old: ChatRef, new: ChatRef) -> bool: ...
@@ -305,7 +316,14 @@ class DiscordAdapter:
         )
 
     def _subscribe_command(self) -> app_commands.Command[Any, ..., None]:
-        async def subscribe(interaction: discord.Interaction[Any], url: str | None = None) -> None:
+        async def subscribe(
+            interaction: discord.Interaction[Any],
+            url: str | None = None,
+            file: discord.Attachment | None = None,
+        ) -> None:
+            if file is not None:
+                await self.respond_upload(interaction, url, file)
+                return
             if url is None or not url.strip():
                 lang = lang_for_locale(str(interaction.locale))
                 await interaction.response.send_modal(SubscribeModal(self, lang))
@@ -315,7 +333,7 @@ class DiscordAdapter:
             await self.respond(interaction, "subscribe", url)
 
         callback: Callable[..., Coroutine[Any, Any, None]] = app_commands.describe(
-            url=self._description("arg.subscribe")
+            url=self._description("arg.subscribe"), file=self._description("arg.subscribe_file")
         )(subscribe)
         return app_commands.Command(
             name="subscribe", description=self._description("cmd.subscribe"), callback=callback
@@ -385,6 +403,33 @@ class DiscordAdapter:
         if interaction.context.dm_channel and interaction.channel_id is not None:
             await self._adopt_dm_row(interaction.channel_id, chat)
         reply = await self.router.reply(chat, name, arg, locale=str(interaction.locale))
+        if not reply.text:  # rate limited and already warned
+            await self._discard(interaction)
+            return
+        messages = self._present(reply)
+        await self._say(interaction, messages[-1], extra=messages[:-1], rows=reply.buttons)
+
+    async def respond_upload(
+        self, interaction: discord.Interaction[Any], url: str | None, file: discord.Attachment
+    ) -> None:
+        """Use an attached ``.ics`` file as the caller's timetable (answered privately)."""
+        await interaction.response.defer(thinking=True, ephemeral=is_private(interaction))
+        chat = user_chat(interaction.user.id)
+        locale = str(interaction.locale)
+        lang = lang_for_locale(locale)
+        if url is not None and url.strip():
+            reply = Reply(tr(lang, "upload_both"), lang=lang)
+        else:
+
+            async def read() -> bytes:
+                try:
+                    return await file.read()
+                except discord.HTTPException as exc:
+                    raise UserError(tr(lang, "upload_read_failed")) from exc
+
+            reply = await self.router.upload(
+                chat, file.filename, file.content_type, file.size, read, locale=locale
+            )
         if not reply.text:  # rate limited and already warned
             await self._discard(interaction)
             return

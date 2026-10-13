@@ -11,7 +11,7 @@ import asyncio
 import hashlib
 import hmac
 import logging
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from typing import Protocol
 
@@ -19,7 +19,14 @@ from plan_bot.config import Settings
 from plan_bot.db import Subscription
 from plan_bot.diff import Change, diff
 from plan_bot.domain import GroupFilter, Lesson
-from plan_bot.fetch import DEMO_URL, FetchError, demo_calendar, normalize_url, redact_url
+from plan_bot.fetch import (
+    DEMO_URL,
+    UPLOAD_URL,
+    FetchError,
+    demo_calendar,
+    normalize_url,
+    redact_url,
+)
 from plan_bot.formatting import (
     format_changes,
     humanize,
@@ -42,6 +49,16 @@ log = logging.getLogger(__name__)
 #: Consecutive refresh failures after which the chat is told about the problem.
 ERROR_NOTIFY_THRESHOLD = 3
 MAX_REMINDER_MINUTES = 24 * 60
+#: Content types a browser or Discord may report for an exported ``.ics`` file.
+UPLOAD_CONTENT_TYPES = frozenset(
+    {
+        "text/calendar",
+        "application/ics",
+        "application/x-ics",
+        "text/plain",
+        "application/octet-stream",
+    }
+)
 
 
 class UserError(Exception):
@@ -154,20 +171,76 @@ class BotService:
         lessons = await self._download(url, now, lang)
         sub = await self.repo.update(chat, ics_url=url)
         await self._store(sub, lessons, now)
+        lines = self._saved_lines(
+            sub, lessons, now, tr(lang, "saved", where=self._where(url, lang))
+        )
+        if url == DEMO_URL:
+            lines.append(tr(lang, "saved_demo"))
+        return "\n".join(lines)
+
+    async def upload_feed(
+        self,
+        chat: ChatRef,
+        filename: str,
+        content_type: str | None,
+        size: int,
+        read: Callable[[], Awaitable[bytes]],
+    ) -> str:
+        """Use an uploaded ``.ics`` file as the chat's timetable (replacing any earlier one).
+
+        ``size`` is checked before ``read`` is called, so an oversized attachment is
+        never downloaded. Uploaded calendars are never refreshed: only a new upload
+        updates them, and that upload is compared with the previous one to report changes.
+        """
+        lang = await self.language(chat)
+        limit = self.settings.max_ics_bytes
+        if size > limit:
+            raise UserError(tr(lang, "upload_too_large", mb=limit // 1_000_000))
+        kind = (content_type or "").split(";", 1)[0].strip().lower()
+        if not filename.lower().endswith(".ics") or (kind and kind not in UPLOAD_CONTENT_TYPES):
+            raise UserError(tr(lang, "upload_bad_type"))
+        data = await read()
+        if len(data) > limit:
+            raise UserError(tr(lang, "upload_too_large", mb=limit // 1_000_000))
+        now = self.clock()
+        lessons = await self._expand(data, now, lang, not_ics_key="upload_not_ics")
+        previous = await self.repo.get(chat)
+        old = (
+            await self.repo.lessons(previous.id)
+            if previous is not None and previous.ics_url == UPLOAD_URL
+            else []
+        )
+        sub = await self.repo.update(chat, ics_url=UPLOAD_URL)
+        window_end = await self._store(sub, lessons, now)
+        lines = self._saved_lines(
+            sub, lessons, now, tr(lang, "saved", where=tr(lang, "feed_upload"))
+        )
+        if old and window_end is not None:
+            until = min(window_end, now + timedelta(days=self.settings.change_horizon_days))
+            changes = [
+                c
+                for c in diff(old, lessons, since=now, until=until)
+                if c.lesson.matches(self._filter(sub))
+            ]
+            lines.append(
+                format_changes(changes, self.tz, lang) if changes else tr(lang, "upload_same")
+            )
+        lines.append(tr(lang, "saved_upload_hint"))
+        return "\n".join(lines)
+
+    def _saved_lines(
+        self, sub: Subscription, lessons: list[Lesson], now: datetime, saved: str
+    ) -> list[str]:
+        lang = sub.language
         upcoming = [les for les in lessons if les.start >= now and not les.cancelled]
         groups = group_names(lessons)
-        lines = [
-            tr(lang, "saved", where=self._where(url, lang)),
-            tr(lang, "upcoming", n=len(upcoming)),
-        ]
-        if groups:
+        lines = [saved, tr(lang, "upcoming", n=len(upcoming))]
+        if len(groups) > 1:  # a single tag cannot tell anyone's classes apart
             lines.append(tr(lang, "groups_found", groups=", ".join(groups)))
             lines.append(tr(lang, "filter_hint", example=",".join(groups[:2])))
         if sub.reminder_minutes:
             lines.append(tr(lang, "reminders_on", n=sub.reminder_minutes))
-        if url == DEMO_URL:
-            lines.append(tr(lang, "saved_demo"))
-        return "\n".join(lines)
+        return lines
 
     async def today_view(self, chat: ChatRef) -> DayView:
         return await self._day_view(chat, 0, "title.today")
@@ -221,9 +294,15 @@ class BotService:
         lang = sub.language
         names = group_names(lessons)
         current = self._filter(sub)
-        lines = [
-            tr(lang, "groups_list", groups=", ".join(names)) if names else tr(lang, "groups_none")
-        ]
+        if len(names) == 1:
+            first = tr(lang, "groups_single", group=names[0])
+        else:
+            first = (
+                tr(lang, "groups_list", groups=", ".join(names))
+                if names
+                else tr(lang, "groups_none")
+            )
+        lines = [first]
         lines.append(
             tr(lang, "filter_current", f=sub.group_filter) if current else tr(lang, "filter_none")
         )
@@ -240,10 +319,13 @@ class BotService:
         cleaned = GroupFilter.clean(value)
         parsed = GroupFilter.parse(cleaned)
         sub = await self.repo.update(chat, group_filter=cleaned)
-        known = {g.casefold() for g in group_names(await self.repo.lessons(sub.id))}
+        names = group_names(await self.repo.lessons(sub.id))
+        known = {g.casefold() for g in names}
         unknown = sorted(parsed.tokens - known)
         reply = tr(lang, "filter_set", f=cleaned)
-        if known and unknown:
+        if len(known) == 1:
+            reply += "\n" + tr(lang, "groups_single", group=names[0])
+        elif known and unknown:
             reply += "\n" + tr(lang, "filter_unknown", x=", ".join(unknown))
         return reply
 
@@ -292,7 +374,7 @@ class BotService:
             else tr(lang, "off")
         )
         lines = [
-            tr(lang, "status_feed", where=self._where(sub.ics_url, lang)),
+            tr(lang, "status_feed", where=self._where(sub.ics_url, lang, sub.last_refresh_at)),
             tr(lang, "status_classes", n=len(lessons)),
             tr(lang, "status_filter", f=sub.group_filter or tr(lang, "status_none")),
             tr(lang, "status_remind", v=remind),
@@ -300,7 +382,9 @@ class BotService:
             tr(lang, "status_summary", v=tr(lang, "on" if sub.weekly_summary else "off")),
             tr(lang, "status_lang", v=sub.language),
         ]
-        if sub.last_refresh_at is not None:
+        if sub.ics_url == UPLOAD_URL:
+            lines.append(tr(lang, "upload_status_hint"))
+        elif sub.last_refresh_at is not None:
             ago = humanize(self.clock() - sub.last_refresh_at, lang)
             lines.append(tr(lang, "status_refresh", ago=ago))
         if sub.last_error:
@@ -312,6 +396,8 @@ class BotService:
         lang = sub.language if sub is not None else DEFAULT_LANG
         if sub is None or sub.ics_url is None:
             raise NoFeedError(tr(lang, "no_feed"))
+        if sub.ics_url == UPLOAD_URL:
+            raise UserError(tr(lang, "refresh_uploaded"))
         changes = await self.refresh_subscription(sub, self.clock(), notify=False)
         relevant = [c for c in changes if c.lesson.matches(self._filter(sub))]
         if not relevant:
@@ -331,6 +417,8 @@ class BotService:
         refreshed = 0
         base = timedelta(minutes=self.settings.refresh_minutes)
         for sub in await self.repo.subscriptions_with_feed():
+            if sub.ics_url == UPLOAD_URL:  # nothing to refetch; only a new upload updates it
+                continue
             backoff = base * min(2**sub.error_count, 16)
             if sub.last_refresh_at is not None and now - sub.last_refresh_at < backoff:
                 continue
@@ -422,9 +510,14 @@ class BotService:
         # Keep the past week too, so "/week" still shows Monday on a Friday.
         return Window(now - timedelta(days=8), now + timedelta(days=self.settings.horizon_days))
 
-    @staticmethod
-    def _where(url: str, lang: str) -> str:
-        return tr(lang, "feed_demo") if url == DEMO_URL else redact_url(url)
+    def _where(self, url: str, lang: str, at: datetime | None = None) -> str:
+        if url == DEMO_URL:
+            return tr(lang, "feed_demo")
+        if url == UPLOAD_URL:
+            if at is None:
+                return tr(lang, "feed_upload")
+            return tr(lang, "feed_upload_on", date=at.astimezone(self.tz).date().isoformat())
+        return redact_url(url)
 
     async def _download(self, url: str, now: datetime, lang: str) -> list[Lesson]:
         try:
@@ -432,14 +525,24 @@ class BotService:
                 data = demo_calendar(now.astimezone(self.tz).date())
             else:
                 data = await self.fetcher.fetch(url)
-            async with self._expanding:
-                return await asyncio.to_thread(expand, data, self._window(now), self.tz)
+            return await self._expand(data, now, lang)
         except FetchError as exc:
             raise UserError(tr(lang, "download_failed", error=exc.localized(lang))) from exc
         except FeedTooComplex as exc:
             raise UserError(tr(lang, "too_complex")) from exc
         except IcsError as exc:
             raise UserError(tr(lang, "not_ics", error=exc)) from exc
+
+    async def _expand(
+        self, data: bytes, now: datetime, lang: str, *, not_ics_key: str = "not_ics"
+    ) -> list[Lesson]:
+        try:
+            async with self._expanding:
+                return await asyncio.to_thread(expand, data, self._window(now), self.tz)
+        except FeedTooComplex as exc:
+            raise UserError(tr(lang, "too_complex")) from exc
+        except IcsError as exc:
+            raise UserError(tr(lang, not_ics_key, error=exc)) from exc
 
     async def _store(
         self, sub: Subscription, lessons: list[Lesson], now: datetime
@@ -512,6 +615,7 @@ class BotService:
 
 __all__ = [
     "DEMO_URL",
+    "UPLOAD_URL",
     "BotService",
     "ChatUnavailable",
     "FeedSource",
