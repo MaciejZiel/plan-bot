@@ -12,11 +12,15 @@ _TOKEN = re.compile(r"\b(bot)?\d{6,}:[A-Za-z0-9_-]{20,}")
 _STANDARD = set(logging.LogRecord("", 0, "", 0, "", None, None).__dict__) | {"message", "asctime"}
 
 
+def redact(text: str) -> str:
+    return _TOKEN.sub("<redacted-token>", text)
+
+
 class RedactSecrets(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         message = record.getMessage()
         if _TOKEN.search(message):
-            record.msg = _TOKEN.sub("<redacted-token>", message)
+            record.msg = redact(message)
             record.args = None
         return True
 
@@ -36,7 +40,8 @@ class JsonFormatter(logging.Formatter):
         }
         if record.exc_info:
             entry["exc"] = self.formatException(record.exc_info)
-        return json.dumps(entry, ensure_ascii=False, default=str)
+        # Tracebacks and extra fields are not covered by the filter: scrub the whole line.
+        return redact(json.dumps(entry, ensure_ascii=False, default=str))
 
 
 class TextFormatter(logging.Formatter):
@@ -48,7 +53,8 @@ class TextFormatter(logging.Formatter):
         extras = _extras(record)
         if extras:
             line += " " + " ".join(f"{k}={v}" for k, v in extras.items())
-        return line
+        # Tracebacks and extra fields are not covered by the filter: scrub the whole line.
+        return redact(line)
 
 
 def configure_logging(level: str = "INFO", fmt: str = "text") -> None:

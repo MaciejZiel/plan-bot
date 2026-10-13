@@ -53,3 +53,18 @@ def test_configure_logging_json(capsys: pytest.CaptureFixture[str]) -> None:
     assert json.loads(err.strip().splitlines()[-1])["adapters"] == "telegram"
     configure_logging("WARNING", "text")
     assert logging.getLogger().level == logging.WARNING
+
+
+@pytest.mark.parametrize("formatter", [JsonFormatter(), TextFormatter()])
+def test_tokens_are_redacted_in_tracebacks_and_extras(formatter: logging.Formatter) -> None:
+    import sys
+
+    try:
+        raise RuntimeError(f"POST https://api.telegram.org/bot{TOKEN}/sendMessage")
+    except RuntimeError:
+        rec = logging.LogRecord("x", logging.ERROR, __file__, 1, "failed", None, sys.exc_info())
+    rec.__dict__["url"] = f"https://api.telegram.org/bot{TOKEN}/getMe"
+    line = formatter.format(rec)
+    assert "RuntimeError" in line
+    assert TOKEN not in line
+    assert "<redacted-token>" in line
