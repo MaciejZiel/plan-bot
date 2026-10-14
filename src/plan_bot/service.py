@@ -11,6 +11,8 @@ import asyncio
 import hashlib
 import hmac
 import logging
+import time
+from collections import OrderedDict
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from typing import Protocol
@@ -63,6 +65,17 @@ UPLOAD_CONTENT_TYPES = frozenset(
 
 class UserError(Exception):
     """A problem caused by user input; the message is shown verbatim."""
+
+
+class BusyError(UserError):
+    """Too many feeds are waiting to be expanded; the caller should try again later."""
+
+
+#: How long a command may wait for its turn to expand a feed before it is told to retry.
+EXPAND_QUEUE_SECONDS = 15.0
+#: Parsed feeds kept for identical uploads or downloads (content hash and window).
+PARSED_CACHE_ENTRIES = 8
+PARSED_CACHE_SECONDS = 600.0
 
 
 class NoFeedError(UserError):
@@ -131,6 +144,11 @@ class BotService:
         # Expanding a feed is CPU-bound: do it in a worker thread so the event loop
         # keeps answering other chats, and one at a time so feeds cannot pile up.
         self._expanding = asyncio.Lock()
+        self.expand_queue_seconds = EXPAND_QUEUE_SECONDS
+        #: (sha256 of the bytes, window) -> (when, lessons or the error to repeat)
+        self._parsed: OrderedDict[
+            tuple[bytes, datetime, datetime], tuple[float, list[Lesson] | tuple[type, str]]
+        ] = OrderedDict()
         # Chat ids are numbers from a small space: a plain hash of one is easy to
         # reverse, so log pseudonyms are keyed with a secret only this bot knows.
         secret = f"{settings.telegram_token or ''}:{settings.discord_token or ''}"
@@ -437,6 +455,9 @@ class BotService:
             refreshed += 1
             try:
                 await self.refresh_subscription(sub, now, notify=True)
+            except BusyError:
+                # Nothing is wrong with the feed; it is retried on the next pass.
+                log.info("feed refresh postponed, expansion queue is full")
             except UserError as exc:
                 count = await self.repo.record_error(sub.id, str(exc), now)
                 log.warning(
@@ -575,13 +596,54 @@ class BotService:
     async def _expand(
         self, data: bytes, now: datetime, lang: str, *, not_ics_key: str = "not_ics"
     ) -> list[Lesson]:
+        window = self._window(now)
+        # Truncated to the hour so a feed asked for again a minute later is a hit.
+        key = (
+            hashlib.sha256(data).digest(),
+            window.start.replace(minute=0, second=0, microsecond=0),
+            window.end.replace(minute=0, second=0, microsecond=0),
+        )
         try:
-            async with self._expanding:
-                return await asyncio.to_thread(expand, data, self._window(now), self.tz)
+            return await self._expand_cached(key, data, window)
+        except BusyError:
+            raise BusyError(tr(lang, "busy")) from None
         except FeedTooComplex as exc:
             raise UserError(tr(lang, "too_complex")) from exc
         except IcsError as exc:
             raise UserError(tr(lang, not_ics_key, error=exc)) from exc
+
+    async def _expand_cached(
+        self, key: tuple[bytes, datetime, datetime], data: bytes, window: Window
+    ) -> list[Lesson]:
+        """Expand ``data``, reusing the result for identical content (failures included)."""
+        hit = self._parsed.get(key)
+        if hit is not None and time.monotonic() - hit[0] < PARSED_CACHE_SECONDS:
+            self._parsed.move_to_end(key)
+            outcome = hit[1]
+            if isinstance(outcome, tuple):
+                raise outcome[0](outcome[1])
+            return list(outcome)
+        try:
+            await asyncio.wait_for(self._expanding.acquire(), self.expand_queue_seconds)
+        except TimeoutError:
+            raise BusyError from None
+        try:
+            lessons = await asyncio.to_thread(expand, data, window, self.tz)
+        except IcsError as exc:
+            self._remember_parsed(key, (type(exc), str(exc)))
+            raise
+        finally:
+            self._expanding.release()
+        self._remember_parsed(key, lessons)
+        return list(lessons)
+
+    def _remember_parsed(
+        self, key: tuple[bytes, datetime, datetime], outcome: list[Lesson] | tuple[type, str]
+    ) -> None:
+        self._parsed[key] = (time.monotonic(), outcome)
+        self._parsed.move_to_end(key)
+        while len(self._parsed) > PARSED_CACHE_ENTRIES:
+            self._parsed.popitem(last=False)
 
     async def _store(
         self, sub: Subscription, lessons: list[Lesson], now: datetime
