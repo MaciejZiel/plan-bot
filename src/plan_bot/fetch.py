@@ -286,7 +286,9 @@ class Fetcher:
                         location = response.headers.get("Location")
                         if not location:
                             raise FetchError("fetch.redirect")
-                        current = normalize_url(urljoin(current, location), any_port=self.allow_private)
+                        current = normalize_url(
+                            urljoin(current, location), any_port=self.allow_private
+                        )
                         continue
                     if response.status != 200:
                         raise FetchError("fetch.http", status=response.status)
