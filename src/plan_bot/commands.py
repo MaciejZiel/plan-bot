@@ -137,9 +137,17 @@ def menu_buttons(lang: str, *, extra: str | None = None) -> tuple[tuple[Button, 
 
 
 class CommandRouter:
-    def __init__(self, service: BotService, *, limiter: RateLimiter | None = None) -> None:
+    def __init__(
+        self,
+        service: BotService,
+        *,
+        limiter: RateLimiter | None = None,
+        heavy_limiter: RateLimiter | None = None,
+    ) -> None:
         self.service = service
         self.limiter = limiter
+        #: Separate, much slower bucket for commands that download or expand a feed.
+        self.heavy_limiter = heavy_limiter
         s = service
         self._views: dict[str, Callable[[ChatRef, str | None], Awaitable[View]]] = {
             "today": lambda chat, _: s.today_view(chat),
@@ -209,10 +217,15 @@ class CommandRouter:
         self, chat: ChatRef, name: str, locale: str | None, run: Callable[[], Awaitable[Reply]]
     ) -> Reply:
         key = str(chat)
-        if self.limiter is not None:
-            wait = self.limiter.check(key, HEAVY_COST if name in HEAVY_COMMANDS else 1)
+        heavy = name in HEAVY_COMMANDS
+        for limiter, cost in (
+            (self.heavy_limiter if heavy else None, 1),
+            (self.limiter, HEAVY_COST if heavy else 1),
+        ):
+            wait = limiter.check(key, cost) if limiter is not None else 0
             if wait:
-                if not self.limiter.should_warn(key):
+                assert limiter is not None
+                if not limiter.should_warn(key):
                     return Reply("")
                 lang = await self.service.language(chat)
                 return Reply(tr(lang, "rate_limited", seconds=wait))

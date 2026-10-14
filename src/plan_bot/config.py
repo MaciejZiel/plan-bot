@@ -60,7 +60,7 @@ class Settings:
     summary_weekday: int = 6
     summary_hour: int = 18
     max_ics_bytes: int = 5_000_000
-    http_timeout_seconds: int = 20
+    http_timeout_seconds: int = 10
     #: Identical feed URLs requested within this many seconds share one download.
     fetch_cache_seconds: int = 120
     #: Allow feeds on private/loopback addresses (off by default to prevent SSRF).
@@ -71,6 +71,9 @@ class Settings:
     #: Per-chat rate limit: a burst of N commands, then this many per minute.
     rate_burst: int = 10
     rate_per_minute: int = 30
+    #: Feed downloads and uploads (heavy commands) are also limited per chat to one per this
+    #: many seconds, on top of the bucket above.
+    heavy_interval_seconds: int = 45
     #: Health endpoint (``GET <base path>/healthz``); port 0 disables it.
     health_host: str = "127.0.0.1"
     health_port: int = 0
@@ -112,13 +115,14 @@ class Settings:
             summary_weekday=weekday,
             summary_hour=hour,
             max_ics_bytes=_int(env, "PLAN_BOT_MAX_ICS_BYTES", 5_000_000, minimum=1024),
-            http_timeout_seconds=_int(env, "PLAN_BOT_HTTP_TIMEOUT", 20, minimum=1),
+            http_timeout_seconds=_int(env, "PLAN_BOT_HTTP_TIMEOUT", 10, minimum=1),
             fetch_cache_seconds=_int(env, "PLAN_BOT_FETCH_CACHE_SECONDS", 120),
             allow_private_urls=_bool(env, "PLAN_BOT_ALLOW_PRIVATE_URLS", False),
             log_level=env.get("PLAN_BOT_LOG_LEVEL", "INFO").strip().upper() or "INFO",
             log_format=log_format,
             rate_burst=_int(env, "PLAN_BOT_RATE_BURST", 10, minimum=1),
             rate_per_minute=_int(env, "PLAN_BOT_RATE_PER_MINUTE", 30, minimum=1),
+            heavy_interval_seconds=_int(env, "PLAN_BOT_HEAVY_INTERVAL", 45, minimum=1),
             health_host=env.get("PLAN_BOT_HEALTH_HOST", "127.0.0.1").strip() or "127.0.0.1",
             health_port=_int(env, "PLAN_BOT_HEALTH_PORT", 0),
             base_path=base_path,

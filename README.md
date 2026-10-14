@@ -433,12 +433,16 @@ log format (`text` or `json`) and the health endpoint (`PLAN_BOT_HEALTH_PORT`,
 ## Operating it
 
 - **Rate limiting.** Every chat has a token bucket (default: a burst of 10 commands, then 30 per
-  minute). Commands that download a feed cost 4 tokens. A throttled chat is warned once, then
-  ignored until it has tokens again.
+  minute). Commands that download a feed or read an upload cost 4 tokens and also draw from a
+  second bucket that holds one token and refills every 45 s (`PLAN_BOT_HEAVY_INTERVAL`), so one
+  chat can start about one heavy command per 45 s instead of seven per minute. A throttled chat is
+  warned once, then ignored until it has tokens again.
 - **Feed errors.** A failing feed is retried with exponential back-off, the stored snapshot keeps
   answering `/next` and reminders, and the chat is told once after the third failure. Identical
-  links share one download for two minutes (at most 32 MB cached), and at most four downloads
-  run at once. Feeds are refreshed in the background, so slow servers do not delay reminders.
+  links share one download for two minutes (at most 32 MB cached), at most four downloads run
+  at once, at most one per host, and one download may take at most 10 s. Links must use port 80,
+  443, 8080 or 8443 (any port with `PLAN_BOT_ALLOW_PRIVATE_URLS`). Error messages and logs never
+  contain parser output or host names. Feeds are refreshed in the background, so slow servers do not delay reminders.
 - **Restarts.** Chats, settings, snapshots and the "reminder already sent" markers are in the
   database, so a restart neither forgets nor repeats a reminder. Reminders are matched against UTC
   instants, and series that carry a timezone are expanded in that timezone, so they stay right
@@ -543,8 +547,12 @@ The public Discord bot has a short [privacy policy](PRIVACY.md) and [terms](TERM
   third failure.
 - **Bounded expansion.** Recurrence rules repeating hourly or faster are ignored, a rule may
   generate at most 50,000 occurrences (counting those before the window), a feed at most 20,000
-  lessons in the window, and expanding one feed may take at most 10 s. Expansion runs in a worker
-  thread, one feed at a time, so a hostile feed cannot stall the other chats.
+  lessons in the window (checked as lessons are produced), at most 2,000 `RDATE` and 2,000 `EXDATE`
+  values per event, and expanding one feed may take at most 10 s (the clock is checked in every
+  loop over the feed). Rules are cut off at the end of the window and rules for days that do not
+  exist (30 February) are skipped. Expansion runs in a worker thread, one feed at a time. Identical
+  content (SHA-256) is parsed once and the result, success or failure, is reused for ten minutes;
+  a command that waits more than 15 s for its turn answers "busy" instead of hanging.
 - **Timezone-correct storage.** All datetimes are aware. The database stores UTC through a
   custom `TypeDecorator`, so SQLite and PostgreSQL behave the same.
 - **Dependencies must be at least two weeks old** (`[tool.uv] exclude-newer`), and every

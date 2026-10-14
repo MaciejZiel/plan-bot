@@ -33,6 +33,10 @@ MAX_OCCURRENCES_PER_EVENT = 2000
 MAX_RULE_STEPS = 50_000
 #: Lessons one feed may produce inside the window (a busy timetable has a few hundred).
 MAX_LESSONS = 20_000
+#: RDATE and EXDATE values one event may list (a semester has a few dozen).
+MAX_DATES_PER_EVENT = 2000
+#: Loops over feed contents look at the clock this often.
+CHECK_EVERY = 256
 #: Wall-clock budget for expanding one feed.
 EXPAND_SECONDS = 10.0
 #: Classes do not repeat by the hour, minute or second; such rules are hostile or broken.
@@ -67,6 +71,11 @@ class _Budget:
         if clock.monotonic() > self.deadline:
             raise FeedTooComplex("the feed is too complex to expand")
 
+    def tick(self, index: int) -> None:
+        """Check the clock on every :data:`CHECK_EVERY`-th item of a loop."""
+        if index % CHECK_EVERY == 0:
+            self.check()
+
 
 @dataclass(frozen=True, slots=True)
 class Window:
@@ -83,7 +92,8 @@ def parse_calendar(data: bytes | str) -> Calendar:
     try:
         cal = Calendar.from_ical(data)
     except Exception as exc:  # icalendar raises a variety of exception types
-        raise IcsError(f"not a valid iCalendar document: {exc}") from exc
+        # The parser's message can quote the feed; keep it out of replies and logs.
+        raise IcsError("not a valid iCalendar document") from exc
     if not isinstance(cal, Calendar) or cal.name != "VCALENDAR":
         raise IcsError("document does not contain a VCALENDAR")
     return cal
@@ -116,30 +126,38 @@ def expand(
             singles.append(event)
 
     lessons: list[Lesson] = []
-    for event in singles:
-        lesson = _lesson_from(event, key=str(event["UID"]), default_tz=default_tz)
-        if lesson is not None and window.contains(lesson.start):
-            lessons.append(lesson)
 
-    for uid, master in masters.items():
-        budget.check()
-        series = _expand_series(uid, master, overrides.pop(uid, []), window, default_tz, budget)
-        lessons.extend(series)
+    def add(lesson: Lesson) -> None:
+        lessons.append(lesson)
         if len(lessons) > MAX_LESSONS:
             raise FeedTooComplex(f"more than {MAX_LESSONS} classes in the next months")
 
+    for index, event in enumerate(singles):
+        budget.tick(index)
+        lesson = _lesson_from(event, key=str(event["UID"]), default_tz=default_tz)
+        if lesson is not None and window.contains(lesson.start):
+            add(lesson)
+
+    for uid, master in masters.items():
+        budget.check()
+        for lesson in _expand_series(
+            uid, master, overrides.pop(uid, []), window, default_tz, budget
+        ):
+            add(lesson)
+
     # Overrides whose master is missing (or was not recurring) still describe a class.
+    index = 0
     for uid, orphans in overrides.items():
         for event in orphans:
+            budget.tick(index)
+            index += 1
             rid = _aware(event.decoded("RECURRENCE-ID"), default_tz)
             if rid is None:
                 continue
             lesson = _lesson_from(event, key=_occurrence_key(uid, rid), default_tz=default_tz)
             if lesson is not None and window.contains(lesson.start):
-                lessons.append(lesson)
+                add(lesson)
 
-    if len(lessons) > MAX_LESSONS:
-        raise FeedTooComplex(f"more than {MAX_LESSONS} classes in the next months")
     lessons.sort(key=lambda les: (les.start, les.summary, les.key))
     return _unique_keys(lessons)
 
@@ -181,18 +199,20 @@ def _expand_series(
     duration = _duration(master, dtstart, default_tz)
 
     by_rid: dict[datetime, Component] = {}
-    for event in overrides:
+    for index, event in enumerate(overrides):
+        budget.tick(index)
         rid = _aware(event.decoded("RECURRENCE-ID"), default_tz)
         if rid is not None:
             by_rid[rid.astimezone(UTC)] = event
 
-    excluded = {d.astimezone(UTC) for d in _date_list(master, "EXDATE", tz)}
+    excluded = {d.astimezone(UTC) for d in _date_list(master, "EXDATE", tz, budget)}
     starts = set(_rrule_starts(master, dtstart, window, duration, budget))
-    starts.update(d for d in _date_list(master, "RDATE", tz))
+    starts.update(_date_list(master, "RDATE", tz, budget))
     starts.add(dtstart)
 
     seen_rids: set[datetime] = set()
-    for original in sorted(starts):
+    for index, original in enumerate(sorted(starts)):
+        budget.tick(index)
         rid_utc = original.astimezone(UTC)
         if rid_utc in excluded:
             continue
@@ -207,7 +227,8 @@ def _expand_series(
             yield lesson
 
     # An override may move an occurrence into the window from outside it.
-    for rid_utc, override in by_rid.items():
+    for index, (rid_utc, override) in enumerate(by_rid.items()):
+        budget.tick(index)
         if rid_utc in seen_rids or rid_utc in excluded:
             continue
         lesson = _lesson_from(
@@ -234,12 +255,16 @@ def _rrule_starts(
     for rule in rules:
         try:
             sub_daily = SUB_DAILY.intersection(str(f).upper() for f in rule.get("FREQ", []))
-            rset = rrulestr(_naive_rule(rule, tz), dtstart=naive_start, forceset=True)
+            text, max_count = _naive_rule(rule, tz, hi)
+            rset = rrulestr(text, dtstart=naive_start, forceset=True)
         except Exception as exc:  # broken RRULE values surface as various exception types
-            log.warning("ignoring unparsable RRULE in %s: %s", master.get("UID"), exc)
+            log.warning("ignoring unparsable RRULE (%s)", type(exc).__name__)
             continue
         if sub_daily:
-            log.warning("ignoring sub-daily RRULE in %s", master.get("UID"))
+            log.warning("ignoring sub-daily RRULE")
+            continue
+        if _never_matches(rule):
+            log.warning("ignoring RRULE that never matches")
             continue
         produced = 0
         # Iterate from DTSTART (``xafter`` would do the same internally) so that the
@@ -247,8 +272,10 @@ def _rrule_starts(
         for step, occurrence in enumerate(rset):
             if occurrence >= hi or produced >= MAX_OCCURRENCES_PER_EVENT:
                 break
+            if max_count is not None and step >= max_count:
+                break
             if step >= MAX_RULE_STEPS:
-                log.warning("RRULE in %s generates too many occurrences", master.get("UID"))
+                log.warning("RRULE generates too many occurrences")
                 break
             if step % 1000 == 999:
                 budget.check()
@@ -257,10 +284,32 @@ def _rrule_starts(
                 yield _localize(occurrence, tz)
 
 
-def _naive_rule(rule: vRecur, tz: tzinfo) -> str:
-    """Render ``rule`` with ``UNTIL`` converted to naive local time.
+_MONTH_DAYS = (31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
 
-    Expanding in naive local time keeps the wall-clock time stable across DST.
+
+def _never_matches(rule: vRecur) -> bool:
+    """True for ``BYMONTH`` / ``BYMONTHDAY`` pairs no date satisfies (30 February).
+
+    dateutil checks ``UNTIL`` only when it produces an occurrence, so a rule that matches
+    nothing walks to the year 9999 (about 2.5 s) and neither ``UNTIL`` nor the budget can
+    stop it. This catches the cheap way to ask for that; the budget still bounds the rest.
+    """
+    days = [int(d) for d in rule.get("BYMONTHDAY", [])]
+    if not days or any(d <= 0 for d in days):
+        return False
+    months = [int(m) for m in rule.get("BYMONTH", [])] or list(range(1, 13))
+    return not any(d <= _MONTH_DAYS[m - 1] for d in days for m in months if 1 <= m <= 12)
+
+
+def _naive_rule(rule: vRecur, tz: tzinfo, end: datetime) -> tuple[str, int | None]:
+    """Render ``rule`` with ``UNTIL`` in naive local time capped at ``end``, plus its ``COUNT``.
+
+    ``COUNT`` is taken out of the rule (dateutil deprecates it next to ``UNTIL``) and
+    returned, so the caller enforces it.
+
+    Expanding in naive local time keeps the wall-clock time stable across DST. The cap
+    matters for rules that never match (``BYMONTH=2;BYMONTHDAY=30``): without an end,
+    the iterator walks to the year 9999 inside a single step and no budget can stop it.
     """
     data: dict[str, Any] = {k: list(v) for k, v in rule.items()}
     until = data.get("UNTIL")
@@ -272,8 +321,13 @@ def _naive_rule(rule: vRecur, tz: tzinfo) -> str:
             data["UNTIL"] = [value.replace(tzinfo=None)]
         elif isinstance(value, date):
             data["UNTIL"] = [datetime.combine(value, time(23, 59, 59))]
+    count_values = data.pop("COUNT", None)
+    count = int(count_values[0]) if count_values else None
+    capped = data.get("UNTIL")
+    if not capped or capped[0] > end:
+        data["UNTIL"] = [end]
     rendered: bytes = vRecur(data).to_ical()  # type: ignore[no-untyped-call]
-    return rendered.decode()
+    return rendered.decode(), count
 
 
 def _localize(naive: datetime, tz: tzinfo) -> datetime:
@@ -367,14 +421,19 @@ def _aware(value: object, default_tz: tzinfo) -> datetime | None:
     return None
 
 
-def _date_list(event: Component, name: str, tz: tzinfo) -> Iterator[datetime]:
+def _date_list(event: Component, name: str, tz: tzinfo, budget: _Budget) -> Iterator[datetime]:
     values = event.get(name)
     if values is None:
         return
     if not isinstance(values, list):
         values = [values]
+    count = 0
     for group in values:
         for item in getattr(group, "dts", []):
+            count += 1
+            if count > MAX_DATES_PER_EVENT:
+                raise FeedTooComplex(f"more than {MAX_DATES_PER_EVENT} {name} dates in one event")
+            budget.tick(count)
             moment = _aware(item.dt, tz)
             if moment is not None:
                 yield moment

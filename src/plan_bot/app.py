@@ -61,7 +61,13 @@ async def build_app(
             if rate_limit
             else None
         )
-        yield App(service, CommandRouter(service, limiter=limiter), scheduler, engine)
+        heavy = (
+            RateLimiter(burst=1, per_minute=60 / settings.heavy_interval_seconds)
+            if rate_limit
+            else None
+        )
+        router = CommandRouter(service, limiter=limiter, heavy_limiter=heavy)
+        yield App(service, router, scheduler, engine)
     finally:
         await fetcher.close()
         await engine.dispose()

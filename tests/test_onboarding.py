@@ -99,3 +99,19 @@ async def test_first_contact_stores_only_a_non_default_language(service: BotServ
     stored = await service.repo.get(ChatRef("telegram", "pl"))
     assert stored is not None
     assert stored.language == "pl"
+
+
+async def test_heavy_commands_have_their_own_slow_bucket(service: BotService) -> None:
+    now = [0.0]
+    limiter = RateLimiter(burst=100, per_minute=6000, clock=lambda: now[0])
+    heavy = RateLimiter(burst=1, per_minute=60 / 45, clock=lambda: now[0])
+    router = CommandRouter(service, limiter=limiter, heavy_limiter=heavy)
+    assert "Slow down" not in await router.handle(CHAT, "subscribe", "ftp://x")
+    reply = await router.handle(CHAT, "subscribe", "ftp://x")
+    assert "Slow down" in reply
+    assert "Try again in 4" in reply  # about 45 s
+    assert "Slow down" not in await router.handle(CHAT, "help")  # cheap commands are unaffected
+    other = ChatRef("telegram", "someone-else")
+    assert "Slow down" not in await router.handle(other, "subscribe", "ftp://x")
+    now[0] += 46
+    assert "Slow down" not in await router.handle(CHAT, "subscribe", "ftp://x")

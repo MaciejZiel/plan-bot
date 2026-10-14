@@ -360,3 +360,66 @@ async def test_link_subscriptions_never_get_the_upload_notice(
     assert await service.send_reupload_notices(clock.now) == 0
     assert notifier.sent == []
     assert "Warning" not in await service.today(CHAT)
+
+
+async def test_identical_content_is_parsed_once(
+    service: BotService, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from plan_bot.ics import expand as real
+
+    calls = 0
+
+    def counting(*args: object, **kwargs: object) -> object:
+        nonlocal calls
+        calls += 1
+        return real(*args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr("plan_bot.service.expand", counting)
+    await upload(service, BEFORE)
+    await upload(service, BEFORE, chat=OTHER)
+    assert calls == 1
+    await upload(service, AFTER)
+    assert calls == 2
+
+
+async def test_a_failed_parse_is_remembered_too(
+    service: BotService, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from plan_bot.ics import expand as real
+
+    calls = 0
+
+    def counting(*args: object, **kwargs: object) -> object:
+        nonlocal calls
+        calls += 1
+        return real(*args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr("plan_bot.service.expand", counting)
+    for _ in range(3):
+        with pytest.raises(UserError, match="not an iCalendar"):
+            await upload(service, b"BEGIN:VCALENDAR\r\nnonsense\r\n")
+    assert calls == 1
+
+
+async def test_a_queued_upload_gets_busy_instead_of_hanging(service: BotService) -> None:
+    service.expand_queue_seconds = 0.05
+    async with service._expanding:
+        with pytest.raises(UserError, match="busy"):
+            await upload(service, BEFORE)
+    assert "Timetable saved" in await upload(service, BEFORE)
+
+
+async def test_a_busy_queue_does_not_count_as_a_feed_error(
+    service: BotService, repo: Repository, feeds: FakeFeeds, clock: FakeClock
+) -> None:
+    feeds.payloads["https://uni.example/a.ics"] = BEFORE
+    await service.set_feed(CHAT, "https://uni.example/a.ics")
+    service.expand_queue_seconds = 0.05
+    clock.now += timedelta(days=1)
+    feeds.payloads["https://uni.example/a.ics"] = AFTER
+    async with service._expanding:
+        await service.refresh_due(clock.now)
+    sub = await repo.get(CHAT)
+    assert sub is not None
+    assert sub.error_count == 0
+    assert sub.last_error is None

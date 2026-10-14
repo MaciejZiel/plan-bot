@@ -551,3 +551,27 @@ async def test_a_failed_refresh_right_after_the_upgrade_keeps_the_old_snapshot_a
     assert recovered is not None
     assert recovered.parser_version == PARSER_VERSION
     assert recovered.error_count == 0
+
+
+async def test_parser_text_is_neither_shown_nor_stored_nor_logged(
+    service: BotService,
+    feeds: FakeFeeds,
+    repo: Repository,
+    clock: FakeClock,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    feeds.payloads[URL] = fixture_bytes("sample.ics")
+    await service.set_feed(CHAT, URL)
+    secret = "BEGIN:VCALENDAR\r\nDTSTART:secret-token-xyz\r\nBEGIN:VEVENT\r\nEND:VCALENDAR\r\n"
+    feeds.payloads[URL] = secret.encode()
+    caplog.set_level(logging.DEBUG)
+    clock.now += timedelta(days=1)
+    await service.refresh_due(clock.now)
+    sub = await repo.get(CHAT)
+    assert sub is not None
+    assert sub.last_error
+    assert "secret-token-xyz" not in sub.last_error
+    assert "secret-token-xyz" not in caplog.text
+    with pytest.raises(UserError) as info:
+        await service.set_feed(CHAT, "https://x.example/b.ics")
+    assert "secret-token-xyz" not in str(info.value)
