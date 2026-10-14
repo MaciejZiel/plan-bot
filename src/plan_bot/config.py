@@ -71,6 +71,9 @@ class Settings:
     #: Per-chat rate limit: a burst of N commands, then this many per minute.
     rate_burst: int = 10
     rate_per_minute: int = 30
+    #: Feed downloads and uploads (heavy commands) are also limited per chat to one per this
+    #: many seconds, on top of the bucket above.
+    heavy_interval_seconds: int = 45
     #: Health endpoint (``GET <base path>/healthz``); port 0 disables it.
     health_host: str = "127.0.0.1"
     health_port: int = 0
@@ -119,6 +122,7 @@ class Settings:
             log_format=log_format,
             rate_burst=_int(env, "PLAN_BOT_RATE_BURST", 10, minimum=1),
             rate_per_minute=_int(env, "PLAN_BOT_RATE_PER_MINUTE", 30, minimum=1),
+            heavy_interval_seconds=_int(env, "PLAN_BOT_HEAVY_INTERVAL", 45, minimum=1),
             health_host=env.get("PLAN_BOT_HEALTH_HOST", "127.0.0.1").strip() or "127.0.0.1",
             health_port=_int(env, "PLAN_BOT_HEALTH_PORT", 0),
             base_path=base_path,
