@@ -75,6 +75,12 @@ def test_window_edges_in_other_timezones() -> None:
     assert lesson.start == warsaw(2026, 11, 10, 10)
 
 
+def _calendar_body(body: str) -> bytes:
+    return (
+        f"BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//t//t//EN\r\n{body}END:VCALENDAR\r\n".encode()
+    )
+
+
 def _calendar(rule: str, start: str, events: int = 1) -> bytes:
     body = "".join(
         f"BEGIN:VEVENT\r\nUID:hostile-{i}\r\nDTSTART;TZID=Europe/Warsaw:{start}\r\n"
@@ -117,7 +123,7 @@ def test_too_many_lessons_are_refused() -> None:
 
 def test_expansion_has_a_time_budget() -> None:
     # Impossible rules make dateutil scan up to the year 9999 without yielding.
-    data = _calendar("FREQ=WEEKLY;BYMONTH=2;BYMONTHDAY=31", "20260105T080000", events=5)
+    data = _calendar("FREQ=DAILY;BYYEARDAY=366;BYMONTH=2", "20260105T080000", events=5)
     with pytest.raises(FeedTooComplex, match="too complex"):
         expand(data, HOSTILE_WINDOW, WARSAW, seconds=0.1)
 
@@ -212,3 +218,90 @@ def test_titles_without_a_trailing_room_are_untouched(title: str) -> None:
     ).encode()
     (lesson,) = expand(data, Window(warsaw(2026, 1, 1), warsaw(2028, 1, 1)), WARSAW)
     assert (lesson.summary, lesson.location) == (title, "")
+
+
+def test_a_rule_for_a_day_that_does_not_exist_is_skipped_at_once() -> None:
+    # 30 February used to walk to the year 9999 (about 2.5 s per series).
+    data = _calendar("FREQ=DAILY;BYMONTH=2;BYMONTHDAY=30", "00010101T080000", events=200)
+    started = time.monotonic()
+    assert expand(data, HOSTILE_WINDOW, WARSAW) == []
+    assert time.monotonic() - started < 2
+
+
+def test_rules_that_can_match_are_not_mistaken_for_impossible_ones() -> None:
+    leap = expand(
+        _calendar("FREQ=YEARLY;BYMONTH=2;BYMONTHDAY=29", "20240229T080000"),
+        Window(warsaw(2027, 1, 1), warsaw(2029, 1, 1)),
+        WARSAW,
+    )
+    assert [(les.start.year, les.start.day) for les in leap] == [(2028, 29)]
+    last = expand(
+        _calendar("FREQ=MONTHLY;BYMONTHDAY=-1;BYMONTH=2", "20260228T080000"),
+        Window(warsaw(2026, 1, 1), warsaw(2027, 12, 31)),
+        WARSAW,
+    )
+    assert len(last) == 2
+
+
+def test_count_is_still_honoured_without_until() -> None:
+    lessons = expand(_calendar("FREQ=WEEKLY;COUNT=3", "20261005T080000"), HOSTILE_WINDOW, WARSAW)
+    assert len(lessons) == 3
+
+
+def test_an_open_rule_never_runs_past_the_window() -> None:
+    lessons = expand(_calendar("FREQ=WEEKLY", "20261005T080000"), HOSTILE_WINDOW, WARSAW)
+    assert max(les.start for les in lessons) < HOSTILE_WINDOW.end
+
+
+def _dates(prop: str, count: int) -> str:
+    base = datetime(2026, 1, 1, 8, tzinfo=UTC)
+    return "".join(f"{prop}:{(base + timedelta(days=i)):%Y%m%dT%H%M%SZ}\r\n" for i in range(count))
+
+
+@pytest.mark.parametrize("prop", ["RDATE", "EXDATE"])
+def test_too_many_rdates_or_exdates_in_one_event_are_refused(prop: str) -> None:
+    body = (
+        "BEGIN:VEVENT\r\nUID:big\r\nDTSTART:20261005T080000Z\r\nRRULE:FREQ=WEEKLY\r\n"
+        + _dates(prop, 2001)
+        + "END:VEVENT\r\n"
+    )
+    with pytest.raises(FeedTooComplex, match=prop):
+        expand(_calendar_body(body), HOSTILE_WINDOW, WARSAW)
+
+
+def test_the_lesson_limit_trips_inside_one_big_series(monkeypatch: pytest.MonkeyPatch) -> None:
+    from plan_bot import ics
+
+    monkeypatch.setattr(ics, "MAX_LESSONS", 5)
+    produced = 0
+    real = ics._lesson_from
+
+    def counting(*args: object, **kwargs: object) -> object:
+        nonlocal produced
+        produced += 1
+        return real(*args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(ics, "_lesson_from", counting)
+    with pytest.raises(FeedTooComplex, match="more than"):
+        expand(_calendar("FREQ=DAILY", "20261005T080000"), HOSTILE_WINDOW, WARSAW)
+    assert produced <= 6  # stopped at once, not after all 147 days
+
+
+def test_loops_over_feed_contents_watch_the_clock(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Many single events, each cheap: only a check inside that loop can stop the feed.
+    from plan_bot import ics
+
+    now = [0.0]
+
+    def slow_clock() -> float:
+        now[0] += 0.1
+        return now[0]
+
+    monkeypatch.setattr(ics.clock, "monotonic", slow_clock)
+    events = "".join(
+        f"BEGIN:VEVENT\r\nUID:s{i}\r\nDTSTART:2026110{1 + i % 9}T080000Z\r\nEND:VEVENT\r\n"
+        for i in range(5000)
+    )
+    with pytest.raises(FeedTooComplex, match="too complex"):
+        expand(_calendar_body(events), HOSTILE_WINDOW, WARSAW, seconds=1.0)
+    assert now[0] < 3  # stopped after about ten clock reads, not after 5000 events
