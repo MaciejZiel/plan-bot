@@ -361,6 +361,7 @@ async def test_link_subscriptions_never_get_the_upload_notice(
     assert notifier.sent == []
     assert "Warning" not in await service.today(CHAT)
 
+
 async def test_identical_content_is_parsed_once(
     service: BotService, monkeypatch: pytest.MonkeyPatch
 ) -> None:

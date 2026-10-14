@@ -552,6 +552,7 @@ async def test_a_failed_refresh_right_after_the_upgrade_keeps_the_old_snapshot_a
     assert recovered.parser_version == PARSER_VERSION
     assert recovered.error_count == 0
 
+
 async def test_parser_text_is_neither_shown_nor_stored_nor_logged(
     service: BotService,
     feeds: FakeFeeds,
