@@ -16,7 +16,6 @@
   <a href="https://github.com/MaciejZiel/plan-bot/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/MaciejZiel/plan-bot/actions/workflows/ci.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="Licence: MIT" src="https://img.shields.io/badge/licence-MIT-blue"></a>
   <img alt="Python 3.12 | 3.14" src="https://img.shields.io/badge/python-3.12%20%7C%203.14-3776ab">
-  <img alt="Coverage 98%" src="https://img.shields.io/badge/coverage-98%25-brightgreen">
   <img alt="Ruff and mypy strict" src="https://img.shields.io/badge/lint-ruff%20%2B%20mypy%20strict-informational">
 </p>
 
@@ -520,7 +519,7 @@ The public Discord bot has a short [privacy policy](PRIVACY.md) and [terms](TERM
   covered by a PL/EN table test.
 - **Own Telegram client instead of a framework.** python-telegram-bot is LGPL-3.0, and aiogram
   depends on certifi (MPL-2.0). The project only accepts permissive licenses, and the bot needs
-  just four Bot API methods, so it uses a small client (about 150 lines including the
+  just four Bot API methods, so it uses a small client (about 260 lines including the
   adapter) on top of aiohttp.
 - **Recurrence with `python-dateutil`, not `recurring-ical-events`.** The latter is LGPL. Series
   with a `TZID` (or floating times) are expanded in the event's local wall-clock time, so a class
