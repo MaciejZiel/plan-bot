@@ -364,7 +364,7 @@ async def test_resolve_errors_do_not_leak_the_host() -> None:
         raise OSError("nope")
 
     resolver = fetch_module.PublicOnlyResolver()
-    resolver._inner.resolve = failing  # type: ignore[method-assign]
+    resolver._inner.resolve = failing  # type: ignore[method-assign,assignment]
     with pytest.raises(fetch_module.PublicOnlyError) as info:
         await resolver.resolve("secret-host.example", 80)
     assert "secret-host" not in str(info.value.error)

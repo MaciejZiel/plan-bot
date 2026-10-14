@@ -289,7 +289,6 @@ def test_the_lesson_limit_trips_inside_one_big_series(monkeypatch: pytest.Monkey
 
 def test_loops_over_feed_contents_watch_the_clock(monkeypatch: pytest.MonkeyPatch) -> None:
     # Many single events, each cheap: only a check inside that loop can stop the feed.
-    from plan_bot import ics
 
     now = [0.0]
 
@@ -297,7 +296,7 @@ def test_loops_over_feed_contents_watch_the_clock(monkeypatch: pytest.MonkeyPatc
         now[0] += 0.1
         return now[0]
 
-    monkeypatch.setattr(ics.clock, "monotonic", slow_clock)
+    monkeypatch.setattr("plan_bot.ics.clock.monotonic", slow_clock)
     events = "".join(
         f"BEGIN:VEVENT\r\nUID:s{i}\r\nDTSTART:2026110{1 + i % 9}T080000Z\r\nEND:VEVENT\r\n"
         for i in range(5000)

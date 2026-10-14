@@ -567,7 +567,8 @@ async def test_parser_text_is_neither_shown_nor_stored_nor_logged(
     clock.now += timedelta(days=1)
     await service.refresh_due(clock.now)
     sub = await repo.get(CHAT)
-    assert sub is not None and sub.last_error
+    assert sub is not None
+    assert sub.last_error
     assert "secret-token-xyz" not in sub.last_error
     assert "secret-token-xyz" not in caplog.text
     with pytest.raises(UserError) as info:
