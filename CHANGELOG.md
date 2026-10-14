@@ -6,6 +6,22 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Security
+- Heavy commands (`/subscribe`, `/refresh`, uploads) also draw from a second per-chat bucket that
+  refills one token every 45 s (`PLAN_BOT_HEAVY_INTERVAL`), instead of the 7.5 per minute the
+  normal bucket allowed. Identical content is parsed once (SHA-256, ten minutes, failures
+  included), and a command that waits more than 15 s for the expansion lock answers "busy".
+- Expansion limits: the clock is checked in the loops over single events, overrides and starts,
+  `RDATE` and `EXDATE` are capped at 2,000 per event, the 20,000 lesson limit trips while a series
+  is expanded, rules are cut off at the end of the window, and rules for non-existent days
+  (`BYMONTH=2;BYMONTHDAY=30`, which walked to year 9999) are skipped. `COUNT` is now enforced by
+  the bot, because dateutil deprecates it next to `UNTIL`.
+- Downloads: one at a time per host, 10 s total deadline (was 20 s; `PLAN_BOT_HTTP_TIMEOUT`), and
+  only ports 80, 443, 8080 and 8443 unless private URLs are allowed.
+- Parser exception text, host names and URLs are no longer shown in chat replies, stored as
+  `last_error` or written to logs; only error keys and exception class names are logged.
+- aiohttp floor raised to 3.13.3.
+
 ### Fixed
 - Classes from the PJATK (Gakko) export were shown two hours early in summer (14:00 as 12:00). The
   export labels real UTC times with `Z`; an earlier change read them as local time when `PRODID`
