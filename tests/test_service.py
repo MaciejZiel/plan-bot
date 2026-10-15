@@ -52,7 +52,7 @@ async def test_set_feed_and_queries(service: BotService, clock: FakeClock) -> No
     reply = await service.set_feed(CHAT, "demo")
     assert "Timetable saved (bundled fictional demo timetable)" in reply
     assert "Groups in this timetable: C1, C2, EN-B2, L1, L2" in reply
-    assert "Reminders are on, 15 min" in reply
+    assert "Reminders are on: 15 min before each class and again when it starts" in reply
 
     today = await service.today(CHAT)
     assert today.startswith("Today · Monday, 12 Oct")
@@ -84,8 +84,14 @@ async def test_filters(service: BotService) -> None:
 
 
 async def test_settings_commands(service: BotService) -> None:
-    assert await service.set_reminder(CHAT, "10") == "I will remind you 10 min before each class."
+    assert "10 min before each class and again when it starts" in await service.set_reminder(
+        CHAT, "10"
+    )
     assert "1 h" in await service.set_reminder(CHAT, "60min")
+    assert await service.set_reminder(CHAT, "off") == "Reminders are off."
+    assert "when each class starts" in await service.set_reminder(CHAT, "start on")
+    assert "Reminders are on: 15 min" in await service.set_reminder(CHAT, "15")
+    assert "Reminders are on, 15 min" in await service.set_reminder(CHAT, "start off")
     assert await service.set_reminder(CHAT, "off") == "Reminders are off."
     for bad in ("soon", "0x", "100000", "-5"):
         with pytest.raises(UserError):
@@ -203,6 +209,48 @@ async def test_reminders(
     assert await service.send_due_reminders(warsaw(2026, 10, 12, 10, 1)) == 1
     assert "Lab 204" in notifier.texts()[1]
     assert await service.prune(warsaw(2026, 10, 20)) == 2
+
+
+async def test_reminder_when_the_class_starts(
+    service: BotService, notifier: RecordingNotifier
+) -> None:
+    await service.set_feed(CHAT, "demo")
+    await service.set_filter(CHAT, "L1")
+    # The lecture starts 08:30: nothing yet at 08:29, one "starting now" message at 08:30.
+    await service.send_due_reminders(warsaw(2026, 10, 12, 8, 16))  # the 15-minute one
+    assert await service.send_due_reminders(warsaw(2026, 10, 12, 8, 29)) == 0
+    assert (
+        await service.send_due_reminders(warsaw(2026, 10, 12, 8, 30) + timedelta(seconds=10)) == 1
+    )
+    assert notifier.texts()[-1].startswith("Starting now: Algorithms and Data Structures")
+    # Sent once, also on the next ticks and after the start passes.
+    assert (
+        await service.send_due_reminders(warsaw(2026, 10, 12, 8, 30) + timedelta(seconds=40)) == 0
+    )
+    assert await service.send_due_reminders(warsaw(2026, 10, 12, 8, 32)) == 0
+
+
+async def test_start_reminder_is_not_replayed_late(
+    service: BotService, notifier: RecordingNotifier
+) -> None:
+    await service.set_feed(CHAT, "demo")
+    await service.set_reminder(CHAT, "off")
+    await service.set_reminder(CHAT, "start on")
+    # A bot that was down until 08:50 does not announce a class that started 20 min ago.
+    assert await service.send_due_reminders(warsaw(2026, 10, 12, 8, 50)) == 0
+    assert notifier.sent == []
+
+
+async def test_start_reminder_can_be_the_only_one(
+    service: BotService, notifier: RecordingNotifier
+) -> None:
+    await service.set_feed(CHAT, "demo")
+    await service.set_reminder(CHAT, "off")
+    await service.set_reminder(CHAT, "start on")
+    assert await service.send_due_reminders(warsaw(2026, 10, 12, 8, 16)) == 0
+    assert await service.send_due_reminders(warsaw(2026, 10, 12, 8, 31)) == 1
+    await service.set_reminder(CHAT, "start off")
+    assert await service.send_due_reminders(warsaw(2026, 10, 12, 10, 16)) == 0
 
 
 async def test_weekly_summary(service: BotService, notifier: RecordingNotifier) -> None:
@@ -465,7 +513,9 @@ async def test_views_match_the_text_answers(service: BotService) -> None:
 
 async def test_remind_list_reports_the_current_setting(service: BotService) -> None:
     await service.set_feed(CHAT, "demo")
-    assert await service.set_reminder(CHAT, "list") == "Reminders are on, 15 min before each class."
+    assert "15 min before each class and again when it starts" in await service.set_reminder(
+        CHAT, "list"
+    )
     await service.set_reminder(CHAT, "off")
     assert await service.set_reminder(CHAT, "status") == "Reminders are off."
     assert await service.set_reminder(OTHER, "list") == "Reminders are off."

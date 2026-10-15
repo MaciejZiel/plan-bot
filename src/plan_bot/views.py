@@ -50,6 +50,8 @@ class ReminderView:
     lang: str
     tz: tzinfo
     now: datetime
+    #: ``True`` for the reminder sent when the class starts, not before it.
+    at_start: bool = False
 
 
 View = DayView | WeekView | NextView | ReminderView
@@ -70,4 +72,6 @@ def _render(view: View) -> str:
         case NextView():
             return format_next(view.info, view.now, view.tz, view.lang)
         case ReminderView():
-            return format_reminder(view.lesson, view.now, view.tz, view.lang)
+            return format_reminder(
+                view.lesson, view.now, view.tz, view.lang, at_start=view.at_start
+            )

@@ -165,13 +165,15 @@ def next_embeds(view: NextView) -> list[discord.Embed]:
 
 def reminder_embed(view: ReminderView) -> discord.Embed:
     lesson, lang = view.lesson, view.lang
-    embed = discord.Embed(
-        title=_title(f"{tr(lang, 'dc.reminder')}: {lesson.summary}"),
-        description=(
+    if view.at_start:
+        title = f"{tr(lang, 'dc.started')}: {lesson.summary}"
+        description = f"**{span(lesson, view.tz)}**"
+    else:
+        title = f"{tr(lang, 'dc.reminder')}: {lesson.summary}"
+        description = (
             f"**{span(lesson, view.tz)}** · {tr(lang, 'dc.starts')} {relative(lesson.start)}"
-        ),
-        colour=AMBER,
-    )
+        )
+    embed = discord.Embed(title=_title(title), description=description, colour=AMBER)
     _lesson_fields(embed, lesson, lang)
     return _footer(embed, lang, view.tz)
 

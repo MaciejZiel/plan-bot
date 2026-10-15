@@ -6,6 +6,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+- A reminder when a class starts ("Starting now: Algorithms and Data Structures"), on by default.
+  `/remind start on|off` toggles it (Discord: `/remind start`), independent of the reminder before
+  the class set with `/remind 15`; `/remind off` turns both off and `/remind list` shows both.
+  It is sent once, only within three minutes of the start, so a restart does not replay the
+  morning. Migration 0005 adds `subscriptions.remind_on_start` (existing chats get it on).
+
 ### Security
 - Heavy commands (`/subscribe`, `/refresh`, uploads) also draw from a second per-chat bucket that
   refills one token every 45 s (`PLAN_BOT_HEAVY_INTERVAL`), instead of the 7.5 per minute the

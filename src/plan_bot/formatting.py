@@ -107,9 +107,16 @@ def format_next(info: NextClass, now: datetime, tz: tzinfo, lang: str = DEFAULT_
     return "\n".join(lines)
 
 
-def format_reminder(lesson: Lesson, now: datetime, tz: tzinfo, lang: str = DEFAULT_LANG) -> str:
+def format_reminder(
+    lesson: Lesson, now: datetime, tz: tzinfo, lang: str = DEFAULT_LANG, *, at_start: bool = False
+) -> str:
     where = f" · {lesson.location}" if lesson.location else ""
-    head = tr(lang, "reminder", summary=lesson.summary, delta=humanize(lesson.start - now, lang))
+    if at_start:
+        head = tr(lang, "reminder_start", summary=lesson.summary)
+    else:
+        head = tr(
+            lang, "reminder", summary=lesson.summary, delta=humanize(lesson.start - now, lang)
+        )
     return f"{head}\n{span(lesson, tz)}{where}"
 
 

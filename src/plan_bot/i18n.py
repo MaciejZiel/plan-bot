@@ -161,10 +161,6 @@ _M: dict[str, dict[str, str]] = {
         "en": "Show only yours with e.g. /filter {example}",
         "pl": "Pokaż tylko swoje, np. /filter {example}",
     },
-    "reminders_on": {
-        "en": "Reminders are on, {n} min before each class.",
-        "pl": "Przypomnienia włączone, {n} min przed każdymi zajęciami.",
-    },
     "feed_demo": {
         "en": "bundled fictional demo timetable",
         "pl": "wbudowany fikcyjny plan demonstracyjny",
@@ -269,16 +265,14 @@ _M: dict[str, dict[str, str]] = {
     },
     "remind_off": {"en": "Reminders are off.", "pl": "Przypomnienia wyłączone."},
     "remind_usage": {
-        "en": "Usage: /remind 15  (minutes before class)  or  /remind off",
-        "pl": "Użycie: /remind 15  (minuty przed zajęciami)  albo  /remind off",
+        "en": "Usage: /remind 15 (minutes before class), /remind start on|off (when it starts) "
+        "or /remind off (everything)",
+        "pl": "Użycie: /remind 15 (minuty przed zajęciami), /remind start on|off (w chwili "
+        "startu) albo /remind off (wszystko)",
     },
     "remind_range": {
         "en": "Pick between 1 and {max} minutes.",
         "pl": "Wybierz od 1 do {max} minut.",
-    },
-    "remind_set": {
-        "en": "I will remind you {delta} before each class.",
-        "pl": "Przypomnę Ci {delta} przed każdymi zajęciami.",
     },
     "on_off_usage": {
         "en": "Use /{what} on or /{what} off",
@@ -294,6 +288,7 @@ _M: dict[str, dict[str, str]] = {
     "status_none": {"en": "none", "pl": "brak"},
     "status_remind": {"en": "Reminders: {v}", "pl": "Przypomnienia: {v}"},
     "status_remind_min": {"en": "{n} min before", "pl": "{n} min przed"},
+    "status_remind_start": {"en": "at the start", "pl": "w chwili startu"},
     "status_changes": {"en": "Change alerts: {v}", "pl": "Alerty o zmianach: {v}"},
     "status_summary": {"en": "Weekly summary: {v}", "pl": "Podsumowanie tygodnia: {v}"},
     "status_lang": {"en": "Language: {v}", "pl": "Język: {v}"},
@@ -408,6 +403,10 @@ _M: dict[str, dict[str, str]] = {
         "en": "Reminder: {summary} starts in {delta}",
         "pl": "Przypomnienie: {summary} zaczyna się za {delta}",
     },
+    "reminder_start": {
+        "en": "Starting now: {summary}",
+        "pl": "Zaczyna się: {summary}",
+    },
     "cancelled_tag": {"en": "[CANCELLED] ", "pl": "[ODWOŁANE] "},
     "changed_header": {"en": "Timetable changed:", "pl": "Zmiany w planie:"},
     "ch.cancelled": {"en": "CANCELLED", "pl": "ODWOŁANE"},
@@ -420,8 +419,21 @@ _M: dict[str, dict[str, str]] = {
     "ch.moved": {"en": "moved to {day}{span}", "pl": "przeniesione na {day}{span}"},
     "ch.room": {"en": "room {old} → {new}", "pl": "sala {old} → {new}"},
     "remind_current": {
-        "en": "Reminders are on, {delta} before each class.",
-        "pl": "Przypomnienia włączone, {delta} przed każdymi zajęciami.",
+        "en": "Reminders are on, {delta} before each class. Change it with /remind 30 or "
+        "add one when the class starts with /remind start on.",
+        "pl": "Przypomnienia włączone, {delta} przed każdymi zajęciami. Zmienisz to przez "
+        "/remind 30, a przypomnienie w chwili startu dodasz przez /remind start on.",
+    },
+    "remind_both": {
+        "en": "Reminders are on: {delta} before each class and again when it starts "
+        "(/remind 30 changes the first, /remind start off drops the second).",
+        "pl": "Przypomnienia włączone: {delta} przed każdymi zajęciami i jeszcze raz w chwili "
+        "startu (/remind 30 zmienia pierwsze, /remind start off wyłącza drugie).",
+    },
+    "remind_start_only": {
+        "en": "I will remind you when each class starts. Add one before it with /remind 15.",
+        "pl": "Przypomnę Ci w chwili startu każdych zajęć. Dodatkowe przed nimi ustawisz "
+        "przez /remind 15.",
     },
     # ------------------------------------------------------------------ Discord
     "dc.room": {"en": "Room", "pl": "Sala"},
@@ -434,6 +446,7 @@ _M: dict[str, dict[str, str]] = {
     "dc.cancelled": {"en": "Cancelled", "pl": "Odwołane"},
     "dc.ends": {"en": "ends", "pl": "koniec"},
     "dc.starts": {"en": "starts", "pl": "start"},
+    "dc.started": {"en": "Starting now", "pl": "Zaczyna się"},
     "dc.more": {"en": "... and {n} more", "pl": "... i jeszcze {n}"},
     "dc.footer": {
         "en": "Times in {tz} · /help for all commands",
@@ -515,6 +528,11 @@ _M: dict[str, dict[str, str]] = {
         "en": "Remind me N minutes before each class",
         "pl": "Przypomnij mi N minut przed każdymi zajęciami",
     },
+    "cmd.remind_start": {
+        "en": "Remind me when a class starts (on or off)",
+        "pl": "Przypomnij mi w chwili startu zajęć (włącz lub wyłącz)",
+    },
+    "arg.remind_start": {"en": "On or off", "pl": "Włącz lub wyłącz"},
     "cmd.remind_list": {"en": "Show the current reminder", "pl": "Pokaż obecne przypomnienie"},
     "cmd.remind_off": {"en": "Turn reminders off", "pl": "Wyłącz przypomnienia"},
     "arg.remind_minutes": {

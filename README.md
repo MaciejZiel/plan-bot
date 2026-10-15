@@ -37,7 +37,7 @@ your own bot token (see [Quick start](#quick-start)):
   every feature in seconds, no university link required
 - **today / tomorrow / this week**: `/today`, `/tomorrow`, `/week`, `/week next`
 - **next class**: room, time and how long until it starts (or how long the current one lasts)
-- **reminders** N minutes before each class (`/remind 15`)
+- **reminders** N minutes before each class (`/remind 15`) and again when it starts (`/remind start off` to turn that off)
 - **change alerts**: room changes, moved or cancelled classes and new or removed ones, detected by
   diffing the feed on every refresh
 - **weekly summary** on Sunday evening
@@ -88,7 +88,7 @@ bot > Timetable saved (bundled fictional demo timetable).
       164 upcoming classes found.
       Groups in this timetable: C1, C2, EN-B2, L1, L2
       Show only yours with e.g. /filter C1,C2
-      Reminders are on, 15 min before each class.
+      Reminders are on: 15 min before each class and again when it starts.
       This is a fictional demo timetable. Try /next, /today and /week, then use your own with
       /subscribe <ICS link>.
       [ Next class ] [ Today ] [ Tomorrow ] [ Week ] [ Next week ]
@@ -115,7 +115,7 @@ bot > ┃ Tomorrow · Tuesday, 13 Oct
       [ Next class ] [ Today ] [ Tomorrow ] [ Week ] [ Next week ]
 
 you > /remind set minutes:30
-bot > I will remind you 30 min before each class.
+bot > Reminders are on: 30 min before each class and again when it starts.
 
 you > asdf
 bot > I did not get that. I can show your timetable: ask for the next class, today, tomorrow or
@@ -316,7 +316,7 @@ which saves one `.ics` file for the whole semester), upload that file instead. O
 
 - **Slash commands** with Polish and English descriptions (`pl`, `en-US`, `en-GB`; other
   locales see English): `/help`, `/demo`, `/subscribe`, `/next`, `/today`, `/tomorrow`, `/week`,
-  `/remind set|list|off`, `/lang`, `/forget`, plus `/groups`, `/filter`, `/changes`, `/summary`,
+  `/remind set|start|list|off`, `/lang`, `/forget`, plus `/groups`, `/filter`, `/changes`, `/summary`,
   `/refresh` and `/status`. They work in servers and in DMs.
 - **Embeds** with the subject, time range, room, teacher and a live countdown ("starts in 25
   minutes", Discord renders it in the reader's language), a green card for a class in progress,
@@ -408,7 +408,7 @@ slash commands. The bot never asks for Administrator, Manage \* or Read Message 
 | `/week`, `/week next` | Weekly plan |
 | `/groups` | Groups found in the feed (`CATEGORIES`) and the active filter |
 | `/filter L1,C2` / `/filter off` | Show only your groups. Classes without a group are always shown |
-| `/remind 15` / `/remind off` | Reminder N minutes before each class (default 15). On Discord: `/remind set`, `/remind list`, `/remind off` |
+| `/remind 15` / `/remind start on\|off` / `/remind off` | Reminder N minutes before each class (default 15) and a "starting now" message when it begins (default on, a lesson at 08:30 gets it at 08:30). `/remind off` turns both off. On Discord: `/remind set`, `/remind start`, `/remind list`, `/remind off` |
 | `/changes on\|off` | Change alerts (default on) |
 | `/summary on\|off` | Weekly summary on Sunday at 18:00 (default on) |
 | `/refresh` | Download the feed now and show what changed (nothing to do for an uploaded file, re-upload it instead) |

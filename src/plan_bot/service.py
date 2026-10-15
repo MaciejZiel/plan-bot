@@ -51,6 +51,9 @@ log = logging.getLogger(__name__)
 #: Consecutive refresh failures after which the chat is told about the problem.
 ERROR_NOTIFY_THRESHOLD = 3
 MAX_REMINDER_MINUTES = 24 * 60
+#: A "class started" reminder is only sent this long after the start (a restart must
+#: not replay the whole morning).
+START_REMINDER_GRACE = timedelta(minutes=3)
 #: Content types a browser or Discord may report for an exported ``.ics`` file.
 UPLOAD_CONTENT_TYPES = frozenset(
     {
@@ -265,8 +268,8 @@ class BotService:
         if len(groups) > 1:  # a single tag cannot tell anyone's classes apart
             lines.append(tr(lang, "groups_found", groups=", ".join(groups)))
             lines.append(tr(lang, "filter_hint", example=",".join(groups[:2])))
-        if sub.reminder_minutes:
-            lines.append(tr(lang, "reminders_on", n=sub.reminder_minutes))
+        if sub.reminder_minutes or sub.remind_on_start:
+            lines.append(self._reminder_description(sub, lang))
         return lines
 
     async def today_view(self, chat: ChatRef) -> DayView:
@@ -360,14 +363,14 @@ class BotService:
         lang = await self.language(chat)
         value = (raw or "").strip().lower()
         if value in {"list", "status"}:
-            sub = await self.repo.get(chat)
-            minutes = sub.reminder_minutes if sub is not None else 0
-            if not minutes:
-                return tr(lang, "remind_off")
-            return tr(lang, "remind_current", delta=humanize(timedelta(minutes=minutes), lang))
+            return self._reminder_description(await self.repo.get(chat), lang)
         if value in {"off", "0", "no"}:
-            await self.repo.update(chat, reminder_minutes=0)
+            await self.repo.update(chat, reminder_minutes=0, remind_on_start=False)
             return tr(lang, "remind_off")
+        if value == "start" or value.startswith("start "):
+            enabled = _on_off(value.removeprefix("start"), "remind start", lang)
+            await self.repo.update(chat, remind_on_start=enabled)
+            return self._reminder_description(await self.repo.get(chat), lang)
         try:
             minutes = int(value.removesuffix("min").strip())
         except ValueError as exc:
@@ -375,7 +378,21 @@ class BotService:
         if not 1 <= minutes <= MAX_REMINDER_MINUTES:
             raise UserError(tr(lang, "remind_range", max=MAX_REMINDER_MINUTES))
         await self.repo.update(chat, reminder_minutes=minutes)
-        return tr(lang, "remind_set", delta=humanize(timedelta(minutes=minutes), lang))
+        return self._reminder_description(await self.repo.get(chat), lang)
+
+    @staticmethod
+    def _reminder_description(sub: Subscription | None, lang: str) -> str:
+        """What reminders the chat gets, in a sentence (also the answer to ``/remind``)."""
+        minutes = sub.reminder_minutes if sub is not None else 0
+        at_start = sub.remind_on_start if sub is not None else False
+        delta = humanize(timedelta(minutes=minutes), lang)
+        if minutes and at_start:
+            return tr(lang, "remind_both", delta=delta)
+        if minutes:
+            return tr(lang, "remind_current", delta=delta)
+        if at_start:
+            return tr(lang, "remind_start_only")
+        return tr(lang, "remind_off")
 
     async def set_changes(self, chat: ChatRef, raw: str | None) -> str:
         lang = await self.language(chat)
@@ -395,11 +412,12 @@ class BotService:
         if sub is None or sub.ics_url is None:
             raise NoFeedError(tr(lang, "no_feed"))
         lessons = await self.repo.lessons(sub.id)
-        remind = (
-            tr(lang, "status_remind_min", n=sub.reminder_minutes)
-            if sub.reminder_minutes
-            else tr(lang, "off")
-        )
+        parts = []
+        if sub.reminder_minutes:
+            parts.append(tr(lang, "status_remind_min", n=sub.reminder_minutes))
+        if sub.remind_on_start:
+            parts.append(tr(lang, "status_remind_start"))
+        remind = " + ".join(parts) or tr(lang, "off")
         lines = [
             tr(lang, "status_feed", where=self._where(sub.ics_url, lang, sub.last_refresh_at)),
             tr(lang, "status_classes", n=len(lessons)),
@@ -501,17 +519,28 @@ class BotService:
         return changes
 
     async def send_due_reminders(self, now: datetime) -> int:
+        """Send the reminder before each class and the one when it starts, once each."""
         sent = 0
         for sub in await self.repo.subscriptions_with_feed():
-            if not sub.reminder_minutes:
-                continue
-            horizon = now + timedelta(minutes=sub.reminder_minutes)
-            lessons = await self.repo.lessons(sub.id, start=now, end=horizon)
-            for lesson in starting_between(lessons, now, horizon, self._filter(sub)):
-                if await self.repo.mark_reminded(sub.id, lesson.key, lesson.start):
-                    view = ReminderView(lesson, sub.language, self.tz, now)
-                    await self._notify(sub, render_text(view), view)
-                    sent += 1
+            due: list[tuple[str, Lesson, bool]] = []
+            if sub.reminder_minutes:
+                horizon = now + timedelta(minutes=sub.reminder_minutes)
+                lessons = await self.repo.lessons(sub.id, start=now, end=horizon)
+                for lesson in starting_between(lessons, now, horizon, self._filter(sub)):
+                    due.append((lesson.key, lesson, False))
+            if sub.remind_on_start:
+                since = now - START_REMINDER_GRACE
+                lessons = await self.repo.lessons(sub.id, start=since, end=now)
+                for lesson in starting_between(lessons, since, now, self._filter(sub)):
+                    # A separate key, so the reminder before the class is not this one.
+                    due.append((f"{lesson.key[:500]}#start", lesson, True))
+            for key, lesson, at_start in due:
+                if not await self.repo.mark_reminded(sub.id, key, lesson.start):
+                    continue
+                view = ReminderView(lesson, sub.language, self.tz, now, at_start=at_start)
+                sent += 1
+                if not await self._notify(sub, render_text(view), view):
+                    break  # the chat is gone or cannot be messaged: nothing more to send
         return sent
 
     async def send_weekly_summaries(self, now: datetime) -> int:
@@ -711,7 +740,11 @@ class BotService:
         except NotificationsBlocked:
             log.info("notifications blocked, disabling them", extra={"chat": self._chat_tag(sub)})
             await self.repo.update(
-                chat, reminder_minutes=0, notify_changes=False, weekly_summary=False
+                chat,
+                reminder_minutes=0,
+                remind_on_start=False,
+                notify_changes=False,
+                weekly_summary=False,
             )
             return False
         except Exception:  # one broken chat must not stop the job for everybody

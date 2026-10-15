@@ -19,6 +19,7 @@ from sqlalchemy import (
     TypeDecorator,
     UniqueConstraint,
     event,
+    true,
 )
 from sqlalchemy.engine import Dialect
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
@@ -67,6 +68,8 @@ class Subscription(Base):
     language: Mapped[str] = mapped_column(String(8), default="en", server_default="en")
     group_filter: Mapped[str] = mapped_column(String(255), default="")
     reminder_minutes: Mapped[int] = mapped_column(Integer, default=15)
+    #: Also send a reminder when a class starts (independent of ``reminder_minutes``).
+    remind_on_start: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
     notify_changes: Mapped[bool] = mapped_column(Boolean, default=True)
     weekly_summary: Mapped[bool] = mapped_column(Boolean, default=True)
     last_weekly_key: Mapped[str | None] = mapped_column(String(16), default=None)

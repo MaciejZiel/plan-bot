@@ -229,7 +229,7 @@ async def test_command_tree_has_every_command_with_options(adapter: DiscordAdapt
     )
     remind = commands["remind"]
     assert isinstance(remind, app_commands.Group)
-    assert {c.name for c in remind.commands} == {"set", "list", "off"}
+    assert {c.name for c in remind.commands} == {"set", "start", "list", "off"}
     subscribe = commands["subscribe"]
     assert isinstance(subscribe, app_commands.Command)
     assert [(p.display_name, p.required) for p in subscribe.parameters] == [
@@ -392,6 +392,10 @@ async def test_reminder_commands(adapter: DiscordAdapter) -> None:
     await slash(adapter, "remind", 30, sub="set")
     listed = await slash(adapter, "remind", sub="list")
     assert "30 min before" in texts(listed.followup.sent[0]["embeds"])
+    await slash(adapter, "remind", "off", sub="start")
+    listed = await slash(adapter, "remind", sub="list")
+    assert "Reminders are on, 30 min before" in texts(listed.followup.sent[0]["embeds"])
+    await slash(adapter, "remind", "on", sub="start")
     await slash(adapter, "remind", sub="off")
     listed = await slash(adapter, "remind", sub="list")
     assert "Reminders are off." in texts(listed.followup.sent[0]["embeds"])
@@ -628,7 +632,7 @@ async def test_polish_wording_sets_the_language_of_a_new_user(
         ("plan na tydzień", "This week"),
         ("plan na przyszły tydzień", "Next week"),
         ("what's next", "Next class: "),
-        ("remind me 30 min before class", "I will remind you 30 min before each class."),
+        ("remind me 30 min before class", "Reminders are on: 30 min before each class"),
         ("/today", "Today · Monday, 12 Oct"),
         ("status", "Feed: bundled fictional demo timetable"),
     ],
@@ -809,6 +813,29 @@ async def test_reminders_are_sent_as_embeds_by_dm(
     assert embed.title == "Reminder: Algorithms and Data Structures (lecture)"
     assert {f.name: f.value for f in embed.fields}["Room"] == "A-101"
     assert "Today" in labels(sent["view"])
+
+
+async def test_start_reminder_is_an_embed_without_a_countdown(
+    adapter: DiscordAdapter,
+    service: BotService,
+    clock: FakeClock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    dm = FakeTarget()
+
+    async def fetch_user(user_id: int) -> FakeTarget:
+        return dm
+
+    monkeypatch.setattr(adapter.client, "fetch_user", fetch_user)
+    service.notifier = adapter
+    await service.set_feed(user_chat(USER), "demo")
+    await service.set_reminder(user_chat(USER), "off")
+    await service.set_reminder(user_chat(USER), "start on")
+    clock.now = warsaw(2026, 10, 12, 8, 30)
+    assert await service.send_due_reminders(clock.now) == 1
+    (embed,) = dm.sent[0]["embeds"]
+    assert embed.title == "Starting now: Algorithms and Data Structures (lecture)"
+    assert "starts" not in (embed.description or "")
 
 
 async def test_plain_notifications_are_embeds_too(
