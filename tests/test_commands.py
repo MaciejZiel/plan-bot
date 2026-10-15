@@ -43,7 +43,7 @@ async def test_router_dispatch(service: BotService) -> None:
         reply = await router.handle(CHAT, name)
         assert reply
         assert "went wrong" not in reply
-    assert "remind you" in await router.handle(CHAT, "remind", "5")
+    assert "5 min before each class" in await router.handle(CHAT, "remind", "5")
     assert "Filter set" in await router.handle(CHAT, "filter", "L1")
     assert "on" in await router.handle(CHAT, "changes", "on")
     assert "on" in await router.handle(CHAT, "summary", "on")

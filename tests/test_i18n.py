@@ -57,13 +57,13 @@ async def test_polish_replies_end_to_end(service: BotService) -> None:
     assert today.startswith("Dzisiaj · Poniedziałek, 12 paź")
     week = await router.handle(CHAT, "week")
     assert week.startswith("Ten tydzień pon. 12 paź – niedz. 18 paź: zajęć:")
-    assert "Przypomnę Ci 10 min przed każdymi zajęciami." in await router.handle(
-        CHAT, "remind", "10"
+    assert "Przypomnienia włączone: 10 min przed każdymi zajęciami i jeszcze raz w chwili" in (
+        await router.handle(CHAT, "remind", "10")
     )
     assert "Użyj /changes on albo /changes off" in await router.handle(CHAT, "changes", "x")
     assert "Link musi zaczynać się" in await router.handle(CHAT, "subscribe", "ftp://x.example/a")
     status = await router.handle(CHAT, "status")
-    assert "Przypomnienia: 10 min przed" in status
+    assert "Przypomnienia: 10 min przed + w chwili startu" in status
     assert "Język: pl" in status
 
 

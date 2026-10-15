@@ -45,6 +45,7 @@ def _seed(path: Path) -> None:
 @pytest.mark.parametrize(
     ("revision", "target", "dropped"),
     [
+        ("0005", "0004", "remind_on_start"),
         ("0004", "0003", "reupload_notified"),
         ("0003", "0002", "parser_version"),
         ("0002", "0001", "language"),

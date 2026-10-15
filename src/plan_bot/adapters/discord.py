@@ -355,9 +355,17 @@ class DiscordAdapter:
         async def off(interaction: discord.Interaction[Any]) -> None:
             await respond(interaction, "remind", "off")
 
+        async def start_(interaction: discord.Interaction[Any], value: str) -> None:
+            await respond(interaction, "remind", f"start {value}")
+
         described = app_commands.describe(minutes=self._description("arg.remind_minutes"))(set_)
+        start_described = app_commands.describe(value=self._description("arg.remind_start"))(start_)
+        start_chosen = app_commands.choices(
+            value=[app_commands.Choice(name=n, value=v) for n, v in _CHOICES["changes"]]
+        )(start_described)
         callbacks: list[tuple[str, str, Callable[..., Coroutine[Any, Any, None]]]] = [
             ("set", "cmd.remind_set", described),
+            ("start", "cmd.remind_start", start_chosen),
             ("list", "cmd.remind_list", list_),
             ("off", "cmd.remind_off", off),
         ]
